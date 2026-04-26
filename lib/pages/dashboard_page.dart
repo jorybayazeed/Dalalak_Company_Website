@@ -1,0 +1,340 @@
+import 'package:flutter/material.dart';
+
+import '../theme/app_theme.dart';
+import '../widgets/common_widgets.dart';
+
+class DashboardPage extends StatelessWidget {
+  const DashboardPage({super.key, required this.onGoToCreateTour});
+
+  final VoidCallback onGoToCreateTour;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: const [
+            SizedBox(
+              width: 220,
+              child: StatCard(
+                title: 'Today Bookings',
+                value: '28',
+                note: '+8 from yesterday',
+                icon: Icons.calendar_month,
+                tint: Color(0xFFE8F8F0),
+              ),
+            ),
+            SizedBox(
+              width: 220,
+              child: StatCard(
+                title: 'Active Tours',
+                value: '12',
+                note: '2 new today',
+                icon: Icons.location_on_outlined,
+                tint: Color(0xFFEEF3FF),
+              ),
+            ),
+            SizedBox(
+              width: 220,
+              child: StatCard(
+                title: 'Current Tourists',
+                value: '146',
+                note: '34 with guides now',
+                icon: Icons.groups_2_outlined,
+                tint: Color(0xFFF5EEFF),
+              ),
+            ),
+            SizedBox(
+              width: 220,
+              child: StatCard(
+                title: 'Monthly Revenue',
+                value: '140,900 SAR',
+                note: '+12.5% this month',
+                icon: Icons.attach_money,
+                tint: Color(0xFFFFF5E9),
+              ),
+            ),
+            SizedBox(
+              width: 220,
+              child: StatCard(
+                title: 'Guides Count',
+                value: '53',
+                note: '44 available',
+                icon: Icons.badge_outlined,
+                tint: Color(0xFFEAF7FF),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _ActionCard(
+              title: 'Create New Tour',
+              subtitle: 'Add a new tour package',
+              color: AppColors.primary,
+              onTap: onGoToCreateTour,
+            ),
+            _ActionCard(
+              title: 'Add Guide',
+              subtitle: 'Register a new tour guide',
+              color: AppColors.amber,
+              onTap: () {},
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        SectionPanel(
+          title: 'Analytics Overview',
+          subtitle: 'Monthly bookings, most requested cities, and top-rated guides',
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 980;
+              if (compact) {
+                return const Column(
+                  children: [
+                    _MiniChartCard(
+                      title: 'Monthly Bookings',
+                      points: [32, 44, 38, 52, 61, 73, 68],
+                      labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
+                    ),
+                    SizedBox(height: 12),
+                    _CityDemandCard(),
+                    SizedBox(height: 12),
+                    _TopGuidesCard(),
+                  ],
+                );
+              }
+
+              return const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _MiniChartCard(
+                      title: 'Monthly Bookings',
+                      points: [32, 44, 38, 52, 61, 73, 68],
+                      labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(child: _CityDemandCard()),
+                  SizedBox(width: 12),
+                  Expanded(child: _TopGuidesCard()),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ActionCard extends StatelessWidget {
+  const _ActionCard({
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 460,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: Colors.white,
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.add, color: Colors.white),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleSmall),
+                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniChartCard extends StatelessWidget {
+  const _MiniChartCard({
+    required this.title,
+    required this.points,
+    required this.labels,
+  });
+
+  final String title;
+  final List<int> points;
+  final List<String> labels;
+
+  @override
+  Widget build(BuildContext context) {
+    final max = points.reduce((a, b) => a > b ? a : b).toDouble();
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        color: const Color(0xFFF8FBFF),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: List.generate(points.length, (i) {
+              final value = points[i].toDouble();
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 500),
+                        height: 12 + (value / max * 120),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(labels[i], style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CityDemandCard extends StatelessWidget {
+  const _CityDemandCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final data = [
+      ('Riyadh', 35),
+      ('Jeddah', 28),
+      ('AlUla', 22),
+      ('Abha', 15),
+    ];
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        color: const Color(0xFFFFFAF2),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Top Requested Cities', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 12),
+          ...data.map((city) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  SizedBox(width: 72, child: Text(city.$1, style: Theme.of(context).textTheme.bodyMedium)),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: city.$2 / 40,
+                        minHeight: 10,
+                        backgroundColor: Colors.white,
+                        color: AppColors.amber,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text('${city.$2}%', style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _TopGuidesCard extends StatelessWidget {
+  const _TopGuidesCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final guides = [
+      ('Ahmed Al-Mansour', 4.9),
+      ('Fatima Al-Zahrani', 4.8),
+      ('Mona Al-Harbi', 4.7),
+    ];
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        color: const Color(0xFFF7F2FF),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Top Rated Guides', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 10),
+          ...guides.map((guide) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  const CircleAvatar(radius: 14, backgroundColor: AppColors.primary, child: Icon(Icons.person, color: Colors.white, size: 16)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(guide.$1, style: Theme.of(context).textTheme.bodyMedium)),
+                  const Icon(Icons.star, color: AppColors.amber, size: 16),
+                  const SizedBox(width: 4),
+                  Text('${guide.$2}', style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}

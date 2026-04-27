@@ -7,11 +7,13 @@ class TopBar extends StatelessWidget {
     super.key,
     required this.title,
     required this.subtitle,
+    required this.onOpenTranslation,
     required this.onOpenNotifications,
   });
 
   final String title;
   final String subtitle;
+  final VoidCallback onOpenTranslation;
   final VoidCallback onOpenNotifications;
 
   @override
@@ -35,6 +37,11 @@ class TopBar extends StatelessWidget {
             ],
           ),
           const Spacer(),
+          IconButton(
+            onPressed: onOpenTranslation,
+            icon: const Icon(Icons.translate_rounded),
+            tooltip: 'Live Translation',
+          ),
           Stack(
             clipBehavior: Clip.none,
             children: [

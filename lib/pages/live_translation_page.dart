@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:dalelak_company/widgets/common_widgets.dart';
+import 'package:dalalak_company_website/widgets/common_widgets.dart';
 
 class LiveTranslationPage extends StatelessWidget {
   const LiveTranslationPage({super.key});
@@ -50,7 +50,7 @@ class _Selector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
-      value: options.first,
+      initialValue: options.first,
       decoration: InputDecoration(labelText: label),
       items: options.map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
       onChanged: (_) {},

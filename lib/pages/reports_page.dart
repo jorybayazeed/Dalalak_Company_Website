@@ -1,40 +1,141 @@
 import 'package:flutter/material.dart';
 
-import 'package:dalelak_company/widgets/common_widgets.dart';
+import '../data/api_service.dart';
+import '../data/models.dart';
+import 'package:dalalak_company_website/widgets/common_widgets.dart';
 
-class ReportsPage extends StatelessWidget {
-  const ReportsPage({super.key});
+class ReportsPage extends StatefulWidget {
+  const ReportsPage({
+    super.key,
+    required this.api,
+  });
+
+  final ApiService api;
+
+  @override
+  State<ReportsPage> createState() => _ReportsPageState();
+}
+
+class _ReportsPageState extends State<ReportsPage> {
+  late Future<ReportSummary> _summaryFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _summaryFuture = widget.api.getReportSummary();
+  }
+
+  void _reload() {
+    setState(() {
+      _summaryFuture = widget.api.getReportSummary();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: const [
-            SizedBox(width: 290, child: StatCard(title: 'Revenue Growth', value: '+28%', note: 'vs last month', icon: Icons.trending_up, tint: Color(0xFFE8F8F0))),
-            SizedBox(width: 290, child: StatCard(title: 'Customer Satisfaction', value: '5.0/5', note: '212 reviews', icon: Icons.star, tint: Color(0xFFFFF5E9))),
-            SizedBox(width: 290, child: StatCard(title: 'Cancellation Rate', value: '4.2%', note: 'improved by 1.1%', icon: Icons.cancel_outlined, tint: Color(0xFFFCEFF0))),
+    return FutureBuilder<ReportSummary>(
+      future: _summaryFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.all(40),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return SectionPanel(
+            title: 'Reports Error',
+            subtitle: 'Failed to load live report data',
+            action: OutlinedButton.icon(
+              onPressed: _reload,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+            child: Text(
+              '${snapshot.error}',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.redAccent),
+            ),
+          );
+        }
+
+        final summary = snapshot.data;
+        if (summary == null) {
+          return const SizedBox.shrink();
+        }
+
+        return Column(
+          children: [
+            Row(
+              children: [
+                const Spacer(),
+                OutlinedButton.icon(
+                  onPressed: _reload,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Refresh'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                SizedBox(
+                  width: 290,
+                  child: StatCard(
+                    title: 'Revenue Growth',
+                    value: '+${summary.revenueGrowth}%',
+                    note: 'vs last month',
+                    icon: Icons.trending_up,
+                    tint: const Color(0xFFE8F8F0),
+                  ),
+                ),
+                SizedBox(
+                  width: 290,
+                  child: StatCard(
+                    title: 'Customer Satisfaction',
+                    value: '${summary.customerSatisfaction.toStringAsFixed(1)}/5',
+                    note: 'Live average rating',
+                    icon: Icons.star,
+                    tint: const Color(0xFFFFF5E9),
+                  ),
+                ),
+                SizedBox(
+                  width: 290,
+                  child: StatCard(
+                    title: 'Cancellation Rate',
+                    value: '${summary.cancellationRate.toStringAsFixed(1)}%',
+                    note: 'From current bookings',
+                    icon: Icons.cancel_outlined,
+                    tint: const Color(0xFFFCEFF0),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SectionPanel(
+              title: 'Performance Summary',
+              subtitle: 'Monthly business analytics',
+              child: Column(
+                children: [
+                  _MetricRow(title: 'Monthly Revenue', value: '${summary.monthlyRevenue} SAR', tone: const Color(0xFFE8F8F0)),
+                  const SizedBox(height: 10),
+                  _MetricRow(title: 'Total Customers', value: '${summary.totalCustomers}', tone: const Color(0xFFEEF3FF)),
+                  const SizedBox(height: 10),
+                  _MetricRow(title: 'Best City', value: summary.bestCity, tone: const Color(0xFFFFF5E9)),
+                  const SizedBox(height: 10),
+                  _MetricRow(
+                    title: 'Most Requested Languages',
+                    value: summary.topLanguages.join(', '),
+                    tone: const Color(0xFFF7F2FF),
+                  ),
+                ],
+              ),
+            ),
           ],
-        ),
-        const SizedBox(height: 14),
-        SectionPanel(
-          title: 'Performance Summary',
-          subtitle: 'Monthly business analytics',
-          child: Column(
-            children: const [
-              _MetricRow(title: 'Monthly Revenue', value: '140,900 SAR', tone: Color(0xFFE8F8F0)),
-              SizedBox(height: 10),
-              _MetricRow(title: 'Total Customers', value: '1,420', tone: Color(0xFFEEF3FF)),
-              SizedBox(height: 10),
-              _MetricRow(title: 'Best City', value: 'Riyadh', tone: Color(0xFFFFF5E9)),
-              SizedBox(height: 10),
-              _MetricRow(title: 'Most Requested Languages', value: 'English, French, Spanish', tone: Color(0xFFF7F2FF)),
-            ],
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 }

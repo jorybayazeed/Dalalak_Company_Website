@@ -1,0 +1,32 @@
+{
+  "users": [
+    {
+      "id": "u1",
+      "name": "Dalalak Company",
+      "email": "company@example.com",
+      "password": "12345678",
+      "role": "company"
+    },
+    {
+      "id": "u2",
+      "name": "Dalalak Admin",
+      "email": "admin@example.com",
+      "password": "12345678",
+      "role": "admin"
+    },
+    {
+      "id": "u3",
+      "name": "Dalalak Staff",
+      "email": "staff@example.com",
+      "password": "12345678",
+      "role": "staff"
+    }
+  ],
+  "tours": [],
+  "bookings": [],
+  "guides": [],
+  "customers": [],
+  "reviews": [],
+  "notifications": [],
+  "rewards": []
+}

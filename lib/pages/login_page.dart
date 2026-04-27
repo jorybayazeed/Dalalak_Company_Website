@@ -4,16 +4,52 @@ import '../app.dart';
 import '../theme/app_theme.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, required this.onLogin});
+  const LoginPage({
+    super.key,
+    required this.onLogin,
+    required this.isLoading,
+    this.errorText,
+  });
 
-  final ValueChanged<UserRole> onLogin;
+  final Future<void> Function(LoginFormData formData) onLogin;
+  final bool isLoading;
+  final String? errorText;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
+  final _emailController = TextEditingController(text: 'company@example.com');
+  final _passwordController = TextEditingController(text: '12345678');
   UserRole _selectedRole = UserRole.company;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email and password are required.')),
+      );
+      return;
+    }
+
+    await widget.onLogin(
+      LoginFormData(
+        email: email,
+        password: password,
+        role: _selectedRole,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,17 +116,27 @@ class _LoginPageState extends State<LoginPage> {
                             const SizedBox(height: 20),
                             const Text('Company Email'),
                             const SizedBox(height: 8),
-                            const TextField(decoration: InputDecoration(hintText: 'company@example.com', prefixIcon: Icon(Icons.email_outlined))),
+                            TextField(
+                              controller: _emailController,
+                              decoration: const InputDecoration(
+                                hintText: 'company@example.com',
+                                prefixIcon: Icon(Icons.email_outlined),
+                              ),
+                            ),
                             const SizedBox(height: 14),
                             const Text('Password'),
                             const SizedBox(height: 8),
-                            const TextField(
+                            TextField(
+                              controller: _passwordController,
                               obscureText: true,
-                              decoration: InputDecoration(hintText: '••••••••', prefixIcon: Icon(Icons.lock_outline_rounded)),
+                              decoration: const InputDecoration(
+                                hintText: '••••••••',
+                                prefixIcon: Icon(Icons.lock_outline_rounded),
+                              ),
                             ),
                             const SizedBox(height: 14),
                             DropdownButtonFormField<UserRole>(
-                              value: _selectedRole,
+                              initialValue: _selectedRole,
                               decoration: const InputDecoration(labelText: 'Login Role'),
                               items: const [
                                 DropdownMenuItem(value: UserRole.company, child: Text('Tourism Company')),
@@ -106,15 +152,28 @@ class _LoginPageState extends State<LoginPage> {
                               },
                             ),
                             const SizedBox(height: 16),
+                            if (widget.errorText != null) ...[
+                              Text(
+                                widget.errorText!,
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.redAccent),
+                              ),
+                              const SizedBox(height: 10),
+                            ],
                             SizedBox(
                               width: double.infinity,
                               child: FilledButton(
-                                onPressed: () => widget.onLogin(_selectedRole),
+                                onPressed: widget.isLoading ? null : _submit,
                                 style: FilledButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(vertical: 14),
                                   backgroundColor: AppColors.primary,
                                 ),
-                                child: const Text('Login to Dashboard'),
+                                child: widget.isLoading
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      )
+                                    : const Text('Login to Dashboard'),
                               ),
                             ),
                             Align(
@@ -134,6 +193,18 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
+}
+
+class LoginFormData {
+  const LoginFormData({
+    required this.email,
+    required this.password,
+    required this.role,
+  });
+
+  final String email;
+  final String password;
+  final UserRole role;
 }
 
 class _FeatureCard extends StatelessWidget {

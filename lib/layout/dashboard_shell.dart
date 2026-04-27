@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../data/api_service.dart';
 import '../pages/bookings_page.dart';
 import '../pages/create_tour_page.dart';
 import '../pages/customers_page.dart';
@@ -12,6 +13,8 @@ import '../pages/reports_page.dart';
 import '../pages/reviews_page.dart';
 import '../pages/settings_page.dart';
 import '../pages/tours_page.dart';
+import '../pages/organization_profile_page.dart';
+import '../pages/promotions_page.dart';
 import '../theme/app_theme.dart';
 import 'sidebar.dart';
 import 'topbar.dart';
@@ -19,12 +22,20 @@ import 'topbar.dart';
 class DashboardShell extends StatefulWidget {
   const DashboardShell({
     super.key,
+    required this.api,
     required this.role,
+    required this.currentUserName,
     required this.onLogout,
+    required this.currentLocale,
+    required this.onToggleLocale,
   });
 
+  final ApiService api;
   final UserRole role;
+  final String currentUserName;
   final VoidCallback onLogout;
+  final Locale currentLocale;
+  final VoidCallback onToggleLocale;
 
   @override
   State<DashboardShell> createState() => _DashboardShellState();
@@ -57,33 +68,50 @@ class _DashboardShellState extends State<DashboardShell> {
         return 'Settings';
       case AppSection.notifications:
         return 'Notifications';
+      case AppSection.organizationProfile:
+        return 'Organization Profile';
+      case AppSection.promotions:
+        return 'Rewards';
     }
   }
 
   Widget _buildPage() {
     switch (_activeSection) {
       case AppSection.dashboard:
-        return DashboardPage(onGoToCreateTour: () => _selectSection(AppSection.createTour));
+        return DashboardPage(
+          api: widget.api,
+          onGoToCreateTour: () => _selectSection(AppSection.createTour),
+        );
       case AppSection.tours:
-        return ToursPage(onCreateTour: () => _selectSection(AppSection.createTour));
+        return ToursPage(
+          api: widget.api,
+          onCreateTour: () => _selectSection(AppSection.createTour),
+        );
       case AppSection.createTour:
-        return const CreateTourPage();
+        return CreateTourPage(
+          api: widget.api,
+          onCreated: () => _selectSection(AppSection.tours),
+        );
       case AppSection.guides:
-        return const GuidesPage();
+        return GuidesPage(api: widget.api);
       case AppSection.bookings:
-        return const BookingsPage();
+        return BookingsPage(api: widget.api);
       case AppSection.customers:
-        return const CustomersPage();
+        return CustomersPage(api: widget.api);
       case AppSection.translation:
         return const LiveTranslationPage();
       case AppSection.reports:
-        return const ReportsPage();
+        return ReportsPage(api: widget.api);
       case AppSection.reviews:
-        return const ReviewsPage();
+        return ReviewsPage(api: widget.api);
       case AppSection.settings:
-        return const SettingsPage();
+        return SettingsPage(api: widget.api);
       case AppSection.notifications:
-        return const NotificationsPage();
+        return NotificationsPage(api: widget.api);
+      case AppSection.organizationProfile:
+        return OrganizationProfilePage(api: widget.api);
+      case AppSection.promotions:
+        return PromotionsPage(api: widget.api);
     }
   }
 
@@ -100,7 +128,8 @@ class _DashboardShellState extends State<DashboardShell> {
       children: [
         TopBar(
           title: _pageTitle,
-          subtitle: 'Welcome back, Saudi Heritage Tours',
+          subtitle: 'Welcome back, ${widget.currentUserName}',
+          onOpenTranslation: () => _selectSection(AppSection.translation),
           onOpenNotifications: () => _selectSection(AppSection.notifications),
         ),
         Expanded(
@@ -124,6 +153,8 @@ class _DashboardShellState extends State<DashboardShell> {
               Navigator.of(context).pop();
               _selectSection(section);
             },
+            currentLocale: widget.currentLocale,
+            onToggleLanguage: widget.onToggleLocale,
             onLogout: widget.onLogout,
           ),
         ),
@@ -148,6 +179,8 @@ class _DashboardShellState extends State<DashboardShell> {
           Sidebar(
             activeSection: _activeSection,
             onSelect: _selectSection,
+            currentLocale: widget.currentLocale,
+            onToggleLanguage: widget.onToggleLocale,
             onLogout: widget.onLogout,
           ),
           Expanded(child: content),

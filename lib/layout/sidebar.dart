@@ -8,11 +8,15 @@ class Sidebar extends StatelessWidget {
     super.key,
     required this.activeSection,
     required this.onSelect,
+    required this.currentLocale,
+    required this.onToggleLanguage,
     required this.onLogout,
   });
 
   final AppSection activeSection;
   final ValueChanged<AppSection> onSelect;
+  final Locale currentLocale;
+  final VoidCallback onToggleLanguage;
   final VoidCallback onLogout;
 
   @override
@@ -23,11 +27,11 @@ class Sidebar extends StatelessWidget {
       (section: AppSection.guides, title: 'Guides', icon: Icons.groups_2_outlined),
       (section: AppSection.bookings, title: 'Bookings', icon: Icons.calendar_month_outlined),
       (section: AppSection.customers, title: 'Customers', icon: Icons.person_outline_rounded),
-      (section: AppSection.translation, title: 'Live Translation', icon: Icons.translate_rounded),
       (section: AppSection.reports, title: 'Reports', icon: Icons.show_chart_rounded),
       (section: AppSection.reviews, title: 'Reviews', icon: Icons.star_outline_rounded),
       (section: AppSection.settings, title: 'Settings', icon: Icons.settings_outlined),
-      (section: AppSection.notifications, title: 'Notifications', icon: Icons.notifications_none_rounded),
+      (section: AppSection.organizationProfile, title: 'Organization Profile', icon: Icons.business),
+      (section: AppSection.promotions, title: 'Rewards', icon: Icons.card_giftcard_outlined),
     ];
 
     return Container(
@@ -103,9 +107,9 @@ class Sidebar extends StatelessWidget {
             child: Column(
               children: [
                 OutlinedButton.icon(
-                  onPressed: () {},
+                  onPressed: onToggleLanguage,
                   icon: const Icon(Icons.language),
-                  label: const Text('العربية'),
+                  label: Text(currentLocale.languageCode == 'en' ? 'العربية' : 'English'),
                   style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
                 ),
                 const SizedBox(height: 8),

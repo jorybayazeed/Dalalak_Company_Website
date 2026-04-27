@@ -1,4 +1,4 @@
-import 'package:dalelak_company/app.dart';
+import 'package:dalalak_company_website/app.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

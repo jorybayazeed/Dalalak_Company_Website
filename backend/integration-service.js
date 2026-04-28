@@ -56,6 +56,48 @@ class IntegrationService {
     return 'Pending';
   }
 
+  _bookingStatusFromDoc(doc) {
+    if (doc && (doc.cancelledAt || doc.canceledAt)) {
+      return 'Cancelled';
+    }
+    if (doc && doc.completedAt) {
+      return 'Completed';
+    }
+    return this._bookingStatus(doc?.status);
+  }
+
+  _safeToDate(value) {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    if (typeof value.toDate === 'function') {
+      return value.toDate();
+    }
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  async _getUsersByTypeVariants(typeVariants) {
+    const variants = [...new Set((typeVariants || []).map((v) => String(v).trim()).filter(Boolean))];
+    if (variants.length === 0) {
+      return [];
+    }
+
+    const resultById = new Map();
+    const chunks = [];
+    for (let i = 0; i < variants.length; i += 10) {
+      chunks.push(variants.slice(i, i + 10));
+    }
+
+    for (const chunk of chunks) {
+      const snap = await this.db.collection('users').where('userType', 'in', chunk).get();
+      snap.docs.forEach((doc) => {
+        resultById.set(doc.id, doc);
+      });
+    }
+
+    return [...resultById.values()];
+  }
+
   _tourStatus(pkg) {
     if (pkg.isCancelled === true) return 'Cancelled';
     const status = String(pkg.status || 'Active');
@@ -130,13 +172,26 @@ class IntegrationService {
     };
   }
 
-  async getGuides() {
+  async getGuides(actor) {
     if (!this.isFirebaseInitialized) return [];
 
-    const [guidesSnap, packagesSnap] = await Promise.all([
-      this.db.collection('users').where('userType', '==', 'tour_guide').get(),
-      this.db.collection('tourPackages').get(),
+    const companyId = String(actor?.id || '');
+    if (this._isCompanyActor(actor) && !companyId) {
+      return [];
+    }
+
+    const toursQuery = this._isCompanyActor(actor)
+      ? this.db.collection('tourPackages').where('createdByCompanyId', '==', companyId)
+      : this.db.collection('tourPackages');
+
+    const [guideDocs, packagesSnap] = await Promise.all([
+      this._getUsersByTypeVariants(['tour_guide', 'Tour Guide']),
+      toursQuery.get(),
     ]);
+
+    const guidesDocsFiltered = this._isCompanyActor(actor)
+      ? guideDocs.filter((doc) => String(doc.data().createdByCompanyId || '') === companyId)
+      : guideDocs;
 
     const tourCountByGuide = new Map();
     packagesSnap.docs.forEach((doc) => {
@@ -145,7 +200,7 @@ class IntegrationService {
       tourCountByGuide.set(guideId, (tourCountByGuide.get(guideId) || 0) + 1);
     });
 
-    return guidesSnap.docs.map((doc) => {
+    return guidesDocsFiltered.map((doc) => {
       const u = doc.data();
       return {
         id: doc.id,
@@ -159,7 +214,7 @@ class IntegrationService {
     });
   }
 
-  async createGuide(payload) {
+  async createGuide(payload, actor) {
     if (!this.isFirebaseInitialized) {
       throw new Error('Firebase is not initialized');
     }
@@ -184,6 +239,12 @@ class IntegrationService {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
+
+    if (this._isCompanyActor(actor)) {
+      doc.createdByCompanyId = String(actor.id || '');
+      doc.createdByCompanyEmail = String(actor.email || '');
+      doc.createdByCompanyName = String(actor.name || '');
+    }
 
     const ref = await this.db.collection('users').add(doc);
     return {
@@ -224,6 +285,278 @@ class IntegrationService {
 
   _isCompanyActor(actor) {
     return Boolean(actor && actor.role === 'company');
+  }
+
+  _normalizeEmail(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+
+  async getCompanyAccountByEmail(email) {
+    if (!this.isFirebaseInitialized) {
+      throw new Error('Firebase is not initialized');
+    }
+
+    const normalizedEmail = this._normalizeEmail(email);
+    if (!normalizedEmail) {
+      return null;
+    }
+
+    const snap = await this.db
+      .collection('companyAccounts')
+      .where('email', '==', normalizedEmail)
+      .limit(1)
+      .get();
+
+    if (snap.empty) {
+      return null;
+    }
+
+    const doc = snap.docs[0];
+    const data = doc.data() || {};
+    return {
+      id: doc.id,
+      email: data.email || normalizedEmail,
+      companyName: data.companyName || '',
+      contactName: data.contactName || '',
+      passwordHash: data.passwordHash || '',
+      status: data.status || 'pending',
+    };
+  }
+
+  async createCompanyRegistrationRequest(payload) {
+    if (!this.isFirebaseInitialized) {
+      throw new Error('Firebase is not initialized');
+    }
+
+    const companyName = String(payload.companyName || '').trim();
+    const contactName = String(payload.contactName || '').trim();
+    const commercialId = String(payload.commercialId || '').trim();
+    const phone = String(payload.phone || '').trim();
+    const city = String(payload.city || '').trim();
+    const address = String(payload.address || '').trim();
+    const email = this._normalizeEmail(payload.email);
+    const passwordHash = String(payload.passwordHash || '').trim();
+
+    if (!companyName || !contactName || !email || !passwordHash) {
+      throw new Error('Missing required registration fields');
+    }
+
+    const [existingCompany, pendingRequests] = await Promise.all([
+      this.db.collection('companyAccounts').where('email', '==', email).limit(1).get(),
+      this.db
+        .collection('companyRegistrationRequests')
+        .where('email', '==', email)
+        .where('status', '==', 'pending')
+        .limit(1)
+        .get(),
+    ]);
+
+    if (!existingCompany.empty) {
+      throw new Error('A company account with this email already exists');
+    }
+    if (!pendingRequests.empty) {
+      throw new Error('A pending registration request already exists for this email');
+    }
+
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const doc = {
+      companyName,
+      contactName,
+      commercialId,
+      phone,
+      city,
+      address,
+      email,
+      passwordHash,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+      reviewedAt: null,
+      reviewedBy: null,
+      reviewReason: '',
+    };
+
+    const ref = await this.db.collection('companyRegistrationRequests').add(doc);
+    return {
+      id: ref.id,
+      companyName,
+      contactName,
+      email,
+      status: 'pending',
+    };
+  }
+
+  async getLatestCompanyRegistrationRequestByEmail(email) {
+    if (!this.isFirebaseInitialized) {
+      throw new Error('Firebase is not initialized');
+    }
+
+    const normalizedEmail = this._normalizeEmail(email);
+    if (!normalizedEmail) {
+      return null;
+    }
+
+    const snap = await this.db
+      .collection('companyRegistrationRequests')
+      .where('email', '==', normalizedEmail)
+      .get();
+
+    if (snap.empty) {
+      return null;
+    }
+
+    const rows = snap.docs.map((doc) => ({
+      id: doc.id,
+      ...(doc.data() || {}),
+    }));
+
+    rows.sort((a, b) => {
+      const aTs = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0;
+      const bTs = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0;
+      return bTs - aTs;
+    });
+
+    const latest = rows[0];
+    return {
+      id: latest.id,
+      status: latest.status || 'pending',
+      reviewReason: latest.reviewReason || '',
+    };
+  }
+
+  async listCompanyRegistrationRequests(status) {
+    if (!this.isFirebaseInitialized) {
+      throw new Error('Firebase is not initialized');
+    }
+
+    const normalizedStatus = String(status || '').trim().toLowerCase();
+    let query = this.db.collection('companyRegistrationRequests');
+    if (normalizedStatus) {
+      query = query.where('status', '==', normalizedStatus);
+    }
+
+    const snap = await query.get();
+    const rows = snap.docs.map((doc) => {
+      const data = doc.data() || {};
+      return {
+        id: doc.id,
+        companyName: data.companyName || '',
+        contactName: data.contactName || '',
+        commercialId: data.commercialId || '',
+        phone: data.phone || '',
+        city: data.city || '',
+        address: data.address || '',
+        email: data.email || '',
+        status: data.status || 'pending',
+        reviewReason: data.reviewReason || '',
+        createdAt: this._dateOnly(data.createdAt),
+        reviewedAt: this._dateOnly(data.reviewedAt),
+        reviewedBy: data.reviewedBy || '',
+      };
+    });
+
+    rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return rows;
+  }
+
+  async reviewCompanyRegistrationRequest(requestId, action, reviewer, reason) {
+    if (!this.isFirebaseInitialized) {
+      throw new Error('Firebase is not initialized');
+    }
+
+    const id = String(requestId || '').trim();
+    const normalizedAction = String(action || '').trim().toLowerCase();
+    if (!id || (normalizedAction !== 'approve' && normalizedAction !== 'reject')) {
+      throw new Error('Invalid review request');
+    }
+
+    const requestRef = this.db.collection('companyRegistrationRequests').doc(id);
+    const requestSnap = await requestRef.get();
+    if (!requestSnap.exists) {
+      throw new Error('Registration request not found');
+    }
+
+    const requestData = requestSnap.data() || {};
+    if (requestData.status !== 'pending') {
+      throw new Error('Registration request was already reviewed');
+    }
+
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const reviewerName = String(reviewer?.name || reviewer?.email || '').trim();
+    const reviewReason = String(reason || '').trim();
+
+    if (normalizedAction === 'approve') {
+      const existingCompany = await this.db
+        .collection('companyAccounts')
+        .where('email', '==', this._normalizeEmail(requestData.email))
+        .limit(1)
+        .get();
+
+      if (!existingCompany.empty) {
+        throw new Error('A company account with this email already exists');
+      }
+
+      const companyRef = this.db.collection('companyAccounts').doc();
+      const companyDoc = {
+        email: this._normalizeEmail(requestData.email),
+        companyName: String(requestData.companyName || '').trim(),
+        contactName: String(requestData.contactName || '').trim(),
+        commercialId: String(requestData.commercialId || '').trim(),
+        phone: String(requestData.phone || '').trim(),
+        city: String(requestData.city || '').trim(),
+        address: String(requestData.address || '').trim(),
+        passwordHash: String(requestData.passwordHash || ''),
+        status: 'approved',
+        approvedAt: now,
+        approvedBy: reviewerName,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await companyRef.set(companyDoc);
+      await requestRef.update({
+        status: 'approved',
+        reviewedAt: now,
+        reviewedBy: reviewerName,
+        reviewReason,
+        approvedCompanyId: companyRef.id,
+        updatedAt: now,
+      });
+
+      await this.db.collection('companyProfiles').doc(companyRef.id).set(
+        {
+          companyId: companyRef.id,
+          companyName: companyDoc.companyName,
+          contactEmail: companyDoc.email,
+          contactPhone: companyDoc.phone,
+          city: companyDoc.city,
+          address: companyDoc.address,
+          commercialId: companyDoc.commercialId,
+          createdAt: now,
+          updatedAt: now,
+        },
+        { merge: true },
+      );
+
+      return {
+        requestId: id,
+        status: 'approved',
+        approvedCompanyId: companyRef.id,
+      };
+    }
+
+    await requestRef.update({
+      status: 'rejected',
+      reviewedAt: now,
+      reviewedBy: reviewerName,
+      reviewReason,
+      updatedAt: now,
+    });
+
+    return {
+      requestId: id,
+      status: 'rejected',
+    };
   }
 
   _assertTourOwnership(tourDocData, actor) {
@@ -567,13 +900,51 @@ class IntegrationService {
     return this.getCompanySettings(actor);
   }
 
-  async getCustomers() {
+  async getCustomers(actor) {
     if (!this.isFirebaseInitialized) return [];
 
-    const touristsSnap = await this.db.collection('users').where('userType', '==', 'tourist').get();
+    if (this._isCompanyActor(actor)) {
+      const scopedBookings = await this.getBookings(actor);
+      const touristIds = [...new Set(scopedBookings.map((b) => b.ownerUserId).filter(Boolean))];
+      if (touristIds.length === 0) {
+        return [];
+      }
+
+      const rows = await Promise.all(
+        touristIds.map(async (touristId) => {
+          const userSnap = await this.db.collection('users').doc(touristId).get();
+          if (!userSnap.exists) {
+            return null;
+          }
+
+          const u = userSnap.data() || {};
+          const touristBookings = scopedBookings.filter((b) => b.ownerUserId === touristId);
+          const latestDate = touristBookings
+            .map((b) => this._dateOnly(b.bookingDate || b.createdAt))
+            .filter(Boolean)
+            .sort()
+            .pop() || '';
+
+          return {
+            id: touristId,
+            name: u.fullName || u.email || 'Unknown Tourist',
+            nationality: u.countryOfResidence || 'Unknown',
+            bookings: touristBookings.length,
+            language: Array.isArray(u.languagesSpoken) && u.languagesSpoken[0]
+              ? String(u.languagesSpoken[0])
+              : 'N/A',
+            lastVisit: latestDate,
+          };
+        }),
+      );
+
+      return rows.filter(Boolean);
+    }
+
+    const touristDocs = await this._getUsersByTypeVariants(['tourist', 'Tourist']);
 
     const rows = await Promise.all(
-      touristsSnap.docs.map(async (doc) => {
+      touristDocs.map(async (doc) => {
         const u = doc.data();
         const bookingsSnap = await this.db.collection('users').doc(doc.id).collection('upcomingBookings').get();
         const bookingRows = bookingsSnap.docs.map((b) => b.data());
@@ -599,18 +970,31 @@ class IntegrationService {
     return rows;
   }
 
-  async getBookings() {
+  async getBookings(actor) {
     if (!this.isFirebaseInitialized) return [];
 
-    const [touristsSnap, packagesSnap] = await Promise.all([
-      this.db.collection('users').where('userType', '==', 'tourist').get(),
-      this.db.collection('tourPackages').get(),
+    const companyId = String(actor?.id || '');
+    if (this._isCompanyActor(actor) && !companyId) {
+      return [];
+    }
+
+    const packageQuery = this._isCompanyActor(actor)
+      ? this.db.collection('tourPackages').where('createdByCompanyId', '==', companyId)
+      : this.db.collection('tourPackages');
+
+    const [touristDocs, packagesSnap] = await Promise.all([
+      this._getUsersByTypeVariants(['tourist', 'Tourist']),
+      packageQuery.get(),
     ]);
 
     const packageById = new Map(packagesSnap.docs.map((doc) => [doc.id, doc.data()]));
 
+    if (this._isCompanyActor(actor) && packageById.size === 0) {
+      return [];
+    }
+
     const rows = [];
-    for (const touristDoc of touristsSnap.docs) {
+    for (const touristDoc of touristDocs) {
       const tourist = touristDoc.data();
       const bookingsSnap = await this.db
         .collection('users')
@@ -621,9 +1005,16 @@ class IntegrationService {
       bookingsSnap.docs.forEach((doc) => {
         const b = doc.data();
         const tourId = b.packageId || b.tourId || '';
+
+        if (this._isCompanyActor(actor) && !packageById.has(tourId)) {
+          return;
+        }
+
         const pkg = packageById.get(tourId) || {};
         const participants = this._asNumber(b.participants || b.numPeople, 1);
         const price = this._asNumber(pkg.price, 0);
+        const bookedAtDate = this._safeToDate(b.bookedAt);
+        const bookingDate = b.bookingDate || b.startDate || b.availableDates || (bookedAtDate ? bookedAtDate.toISOString().slice(0, 10) : null);
         rows.push({
           id: doc.id,
           touristName: b.guestName || tourist.fullName || tourist.email || 'Unknown Tourist',
@@ -631,8 +1022,10 @@ class IntegrationService {
           tourName: pkg.tourTitle || 'Unknown Tour',
           participants,
           totalPrice: this._asNumber(b.totalPrice, participants * price),
-          status: this._bookingStatus(b.status),
+          status: this._bookingStatusFromDoc(b),
           ownerUserId: touristDoc.id,
+          bookingDate,
+          createdAt: b.createdAt || b.bookedAt || null,
         });
       });
     }
@@ -791,11 +1184,11 @@ class IntegrationService {
     await this.db.collection('rewards').doc(id).delete();
   }
 
-  async getDashboardOverview() {
+  async getDashboardOverview(actor) {
     const [tours, bookings, guides] = await Promise.all([
-      this.getTours(),
-      this.getBookings(),
-      this.getGuides(),
+      this.getTours(actor),
+      this.getBookings(actor),
+      this.getGuides(actor),
     ]);
 
     const activeTours = tours.filter((t) => t.status === 'Active').length;
@@ -847,13 +1240,13 @@ class IntegrationService {
     };
   }
 
-  async getReportSummary() {
+  async getReportSummary(actor) {
     const [bookings, reviews, customers, tours, guides] = await Promise.all([
-      this.getBookings(),
+      this.getBookings(actor),
       this.getReviews(),
-      this.getCustomers(),
-      this.getTours(),
-      this.getGuides(),
+      this.getCustomers(actor),
+      this.getTours(actor),
+      this.getGuides(actor),
     ]);
 
     const monthlyRevenue = bookings

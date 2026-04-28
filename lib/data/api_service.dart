@@ -67,6 +67,54 @@ class ApiService {
     return loginResponse;
   }
 
+  Future<String> submitCompanyRegistrationRequest({
+    required String companyName,
+    required String contactName,
+    required String email,
+    required String password,
+    String commercialId = '',
+    String phone = '',
+    String city = '',
+    String address = '',
+  }) async {
+    final response = await http.post(
+      _uri('/api/company-auth/register-request'),
+      headers: _headers(withAuth: false),
+      body: jsonEncode({
+        'companyName': companyName,
+        'contactName': contactName,
+        'email': email,
+        'password': password,
+        'commercialId': commercialId,
+        'phone': phone,
+        'city': city,
+        'address': address,
+      }),
+    );
+
+    final json = _parseResponse(response) as Map<String, dynamic>;
+    return (json['message'] as String?)
+        ?? 'Registration request submitted successfully.';
+  }
+
+  Future<List<Map<String, dynamic>>> getCompanyRequests({String status = ''}) async {
+    final path = status.isNotEmpty
+        ? '/api/admin/company-requests?status=$status'
+        : '/api/admin/company-requests';
+    final response = await http.get(_uri(path), headers: _headers());
+    final json = _parseResponse(response) as List<dynamic>;
+    return json.map((item) => item as Map<String, dynamic>).toList();
+  }
+
+  Future<Map<String, dynamic>> reviewCompanyRequest(String requestId, String action, {String reason = ''}) async {
+    final response = await http.patch(
+      _uri('/api/admin/company-requests/$requestId'),
+      headers: _headers(),
+      body: jsonEncode({'action': action, 'reason': reason}),
+    );
+    return _parseResponse(response) as Map<String, dynamic>;
+  }
+
   Future<void> logout() async {
     if (_token == null) {
       return;

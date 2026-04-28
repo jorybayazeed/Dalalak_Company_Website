@@ -3,6 +3,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -96,6 +97,13 @@ function auth(req, res, next) {
   return next();
 }
 
+function adminOnly(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Forbidden: admin role required' });
+  }
+  return next();
+}
+
 function roleToEnum(role) {
   if (role === 'admin') {
     return 'admin';
@@ -142,31 +150,169 @@ app.get('/', (_, res) => {
   });
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { email, password, role } = req.body || {};
 
   if (!email || !password || !role) {
     return res.status(400).json({ message: 'email, password, and role are required' });
   }
 
-  const db = readDb();
-  const user = db.users.find((item) => item.email.toLowerCase() === String(email).toLowerCase());
+  try {
+    const requestedRole = roleToEnum(role);
 
-  if (!user || user.password !== password || user.role !== roleToEnum(role)) {
-    return res.status(401).json({ message: 'Invalid credentials' });
+    if (requestedRole === 'company' && useRealData()) {
+      const account = await integrationService.getCompanyAccountByEmail(email);
+      if (!account) {
+        const latestRequest = await integrationService.getLatestCompanyRegistrationRequestByEmail(email);
+        if (latestRequest && latestRequest.status !== 'approved') {
+          return res.status(403).json({
+            message: 'Company account is not approved yet',
+            code: 'COMPANY_NOT_APPROVED',
+            status: latestRequest.status,
+            reason: latestRequest.reviewReason,
+          });
+        }
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
+
+      if (account.status !== 'approved') {
+        return res.status(403).json({
+          message: 'Company account is not approved yet',
+          code: 'COMPANY_NOT_APPROVED',
+          status: account.status,
+        });
+      }
+
+      const validPassword = await bcrypt.compare(String(password), String(account.passwordHash || ''));
+      if (!validPassword) {
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
+
+      const token = crypto.randomUUID();
+      const sessionUser = {
+        id: account.id,
+        name: account.companyName || account.contactName || account.email,
+        email: account.email,
+        role: 'company',
+      };
+
+      sessions.set(token, sessionUser);
+      return res.json({ token, user: sessionUser });
+    }
+
+    const db = readDb();
+    const user = db.users.find((item) => item.email.toLowerCase() === String(email).toLowerCase());
+
+    if (!user || user.password !== password || user.role !== requestedRole) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const token = crypto.randomUUID();
+    const sessionUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    };
+
+    sessions.set(token, sessionUser);
+
+    return res.json({ token, user: sessionUser });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.post('/api/company-auth/register-request', async (req, res) => {
+  const {
+    companyName,
+    contactName,
+    email,
+    password,
+    commercialId,
+    phone,
+    city,
+    address,
+  } = req.body || {};
+
+  if (!companyName || !contactName || !email || !password) {
+    return res.status(400).json({
+      message: 'companyName, contactName, email, and password are required',
+    });
   }
 
-  const token = crypto.randomUUID();
-  const sessionUser = {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-  };
+  if (!ensureFirebaseDataMode(res)) return;
 
-  sessions.set(token, sessionUser);
+  try {
+    const passwordHash = await bcrypt.hash(String(password), 12);
+    const requestRow = await integrationService.createCompanyRegistrationRequest({
+      companyName,
+      contactName,
+      email,
+      passwordHash,
+      commercialId,
+      phone,
+      city,
+      address,
+    });
 
-  return res.json({ token, user: sessionUser });
+    return res.status(201).json({
+      message: 'Registration request submitted and waiting for admin approval',
+      request: requestRow,
+    });
+  } catch (error) {
+    if (
+      error.message === 'A company account with this email already exists'
+      || error.message === 'A pending registration request already exists for this email'
+      || error.message === 'Missing required registration fields'
+    ) {
+      return res.status(409).json({ message: error.message });
+    }
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.get('/api/admin/company-requests', auth, adminOnly, async (req, res) => {
+  if (!ensureFirebaseDataMode(res)) return;
+
+  try {
+    const rows = await integrationService.listCompanyRegistrationRequests(req.query.status);
+    return res.json(rows);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.patch('/api/admin/company-requests/:id', auth, adminOnly, async (req, res) => {
+  const { action, reason } = req.body || {};
+
+  if (action !== 'approve' && action !== 'reject') {
+    return res.status(400).json({ message: 'action must be approve or reject' });
+  }
+
+  if (!ensureFirebaseDataMode(res)) return;
+
+  try {
+    const result = await integrationService.reviewCompanyRegistrationRequest(
+      req.params.id,
+      action,
+      req.user,
+      reason,
+    );
+    return res.json(result);
+  } catch (error) {
+    if (error.message === 'Registration request not found') {
+      return res.status(404).json({ message: error.message });
+    }
+    if (
+      error.message === 'Registration request was already reviewed'
+      || error.message === 'A company account with this email already exists'
+      || error.message === 'Invalid review request'
+    ) {
+      return res.status(409).json({ message: error.message });
+    }
+    return res.status(500).json({ message: error.message });
+  }
 });
 
 app.post('/api/auth/logout', auth, (req, res) => {
@@ -178,7 +324,7 @@ app.get('/api/dashboard/overview', auth, async (req, res) => {
   if (!ensureFirebaseDataMode(res)) return;
 
   try {
-    const overview = await integrationService.getDashboardOverview();
+    const overview = await integrationService.getDashboardOverview(req.user);
     return res.json(overview);
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -335,7 +481,7 @@ app.get('/api/bookings', auth, async (req, res) => {
   if (!ensureFirebaseDataMode(res)) return;
 
   try {
-    const rows = await integrationService.getBookings();
+    const rows = await integrationService.getBookings(req.user);
     return res.json(rows);
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -367,7 +513,7 @@ app.get('/api/guides', auth, async (req, res) => {
   if (!ensureFirebaseDataMode(res)) return;
 
   try {
-    const guides = await integrationService.getGuides();
+    const guides = await integrationService.getGuides(req.user);
     return res.json(guides);
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -384,7 +530,7 @@ app.post('/api/guides', auth, async (req, res) => {
   if (!ensureFirebaseDataMode(res)) return;
 
   try {
-    const created = await integrationService.createGuide(req.body || {});
+    const created = await integrationService.createGuide(req.body || {}, req.user);
     return res.status(201).json(created);
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -412,7 +558,7 @@ app.get('/api/customers', auth, async (req, res) => {
   if (!ensureFirebaseDataMode(res)) return;
 
   try {
-    const customers = await integrationService.getCustomers();
+    const customers = await integrationService.getCustomers(req.user);
     return res.json(customers);
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -439,7 +585,7 @@ app.get('/api/reports/summary', auth, async (req, res) => {
   if (!ensureFirebaseDataMode(res)) return;
 
   try {
-    const summary = await integrationService.getReportSummary();
+    const summary = await integrationService.getReportSummary(req.user);
     return res.json(summary);
   } catch (error) {
     return res.status(500).json({ message: error.message });

@@ -14,6 +14,7 @@ import '../pages/reviews_page.dart';
 import '../pages/settings_page.dart';
 import '../pages/tours_page.dart';
 import '../pages/organization_profile_page.dart';
+import '../pages/company_requests_page.dart';
 import '../pages/promotions_page.dart';
 import '../theme/app_theme.dart';
 import 'sidebar.dart';
@@ -72,6 +73,8 @@ class _DashboardShellState extends State<DashboardShell> {
         return 'Organization Profile';
       case AppSection.promotions:
         return 'Rewards';
+      case AppSection.companyRequests:
+        return 'Company Requests';
     }
   }
 
@@ -112,6 +115,8 @@ class _DashboardShellState extends State<DashboardShell> {
         return OrganizationProfilePage(api: widget.api);
       case AppSection.promotions:
         return PromotionsPage(api: widget.api);
+      case AppSection.companyRequests:
+        return CompanyRequestsPage(api: widget.api);
     }
   }
 
@@ -156,6 +161,7 @@ class _DashboardShellState extends State<DashboardShell> {
             currentLocale: widget.currentLocale,
             onToggleLanguage: widget.onToggleLocale,
             onLogout: widget.onLogout,
+            role: widget.role,
           ),
         ),
         appBar: AppBar(
@@ -182,6 +188,7 @@ class _DashboardShellState extends State<DashboardShell> {
             currentLocale: widget.currentLocale,
             onToggleLanguage: widget.onToggleLocale,
             onLogout: widget.onLogout,
+            role: widget.role,
           ),
           Expanded(child: content),
         ],

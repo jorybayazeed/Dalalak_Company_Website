@@ -24,6 +24,7 @@ enum AppSection {
   notifications,
   organizationProfile,
   promotions,
+  companyRequests,
 }
 
 class DalelakCompanyApp extends StatefulWidget {
@@ -137,6 +138,20 @@ class _DalelakCompanyAppState extends State<DalelakCompanyApp> {
     }
   }
 
+  Future<String> _onCompanyRegistrationRequest(CompanyRegistrationFormData formData) async {
+    final message = await _api.submitCompanyRegistrationRequest(
+      companyName: formData.companyName,
+      contactName: formData.contactName,
+      email: formData.email,
+      password: formData.password,
+      commercialId: formData.commercialId,
+      phone: formData.phone,
+      city: formData.city,
+      address: formData.address,
+    );
+    return message;
+  }
+
   Future<void> _onLogout() async {
     try {
       await _api.logout();
@@ -181,6 +196,7 @@ class _DalelakCompanyAppState extends State<DalelakCompanyApp> {
             )
           : LoginPage(
               onLogin: _onLogin,
+              onCompanyRegistrationRequest: _onCompanyRegistrationRequest,
               isLoading: _isLoggingIn,
               errorText: _loginError,
             ),

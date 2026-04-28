@@ -11,6 +11,7 @@ class Sidebar extends StatelessWidget {
     required this.currentLocale,
     required this.onToggleLanguage,
     required this.onLogout,
+    this.role,
   });
 
   final AppSection activeSection;
@@ -18,6 +19,7 @@ class Sidebar extends StatelessWidget {
   final Locale currentLocale;
   final VoidCallback onToggleLanguage;
   final VoidCallback onLogout;
+  final UserRole? role;
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +34,8 @@ class Sidebar extends StatelessWidget {
       (section: AppSection.settings, title: 'Settings', icon: Icons.settings_outlined),
       (section: AppSection.organizationProfile, title: 'Organization Profile', icon: Icons.business),
       (section: AppSection.promotions, title: 'Rewards', icon: Icons.card_giftcard_outlined),
+      if (role == UserRole.admin)
+        (section: AppSection.companyRequests, title: 'Company Requests', icon: Icons.business_center_outlined),
     ];
 
     return Container(

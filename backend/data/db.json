@@ -28,5 +28,45 @@
   "customers": [],
   "reviews": [],
   "notifications": [],
-  "rewards": []
+  "rewards": [],
+  "companyRegistrationRequests": [
+    {
+      "id": "0a257ff8-67de-45d0-bb5a-e46ce1e4db25",
+      "companyName": "Dalelak Company 1",
+      "contactName": "Owner One",
+      "email": "dalelak1@gmail.com",
+      "passwordHash": "$2a$12$TQyxphbih.zS/WwuSKd7OOhGTc5asJmyit7NpQ3batw0fjs61x.KO",
+      "commercialId": "12345",
+      "phone": "0500000000",
+      "city": "Riyadh",
+      "address": "Test address",
+      "status": "approved",
+      "reviewReason": "approved by admin",
+      "reviewedBy": "Dalalak Admin",
+      "reviewedByEmail": "admin@example.com",
+      "reviewedAt": "2026-04-29T21:46:21.738Z",
+      "createdAt": "2026-04-29T21:46:21.400Z",
+      "updatedAt": "2026-04-29T21:46:21.738Z"
+    }
+  ],
+  "companyAccounts": [
+    {
+      "id": "5de4ff87-fbaa-4021-bd8f-99cba4266a92",
+      "companyName": "Dalelak Company 1",
+      "contactName": "Owner One",
+      "email": "dalelak1@gmail.com",
+      "passwordHash": "$2a$12$TQyxphbih.zS/WwuSKd7OOhGTc5asJmyit7NpQ3batw0fjs61x.KO",
+      "commercialId": "12345",
+      "phone": "0500000000",
+      "city": "Riyadh",
+      "address": "Test address",
+      "status": "approved",
+      "createdAt": "2026-04-29T21:46:21.738Z",
+      "updatedAt": "2026-04-29T21:46:21.738Z",
+      "approvedRequestId": "0a257ff8-67de-45d0-bb5a-e46ce1e4db25",
+      "approvedBy": "Dalalak Admin",
+      "approvedByEmail": "admin@example.com",
+      "approvedAt": "2026-04-29T21:46:21.738Z"
+    }
+  ]
 }

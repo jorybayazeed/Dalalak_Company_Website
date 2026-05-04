@@ -49,4 +49,5 @@ app.*.map.json
 
 # Local secrets
 dalelak-b6812-firebase-adminsdk-fbsvc-7e911c55d5.json
+dalelak-b6812-firebase-adminsdk-fbsvc-*.json
 google-services.json

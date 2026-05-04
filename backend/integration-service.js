@@ -118,6 +118,44 @@ class IntegrationService {
     };
   }
 
+  _guideCityFromUser(user) {
+    const locationCity = user?.location && typeof user.location === 'object'
+      ? String(user.location.city || '').trim()
+      : '';
+    const city = String(user?.city || '').trim();
+    const currentCity = String(user?.currentCity || '').trim();
+    const residenceCity = String(user?.residenceCity || '').trim();
+
+    return city || locationCity || currentCity || residenceCity || 'N/A';
+  }
+
+  _looksLikeGuideUser(user) {
+    const normalized = [
+      String(user?.userType || '').trim().toLowerCase(),
+      String(user?.role || '').trim().toLowerCase(),
+      String(user?.accountType || '').trim().toLowerCase(),
+      String(user?.profileType || '').trim().toLowerCase(),
+    ].filter(Boolean);
+
+    if (normalized.some((value) => value.includes('guide'))) {
+      return true;
+    }
+
+    if (user?.isTourGuide === true || user?.guideProfile) {
+      return true;
+    }
+
+    const hasGuideSignals = Boolean(
+      user?.guideLicense
+      || user?.licenseNumber
+      || user?.yearsExperience
+      || user?.specialization,
+    );
+
+    const hasIdentity = Boolean(String(user?.fullName || user?.email || '').trim());
+    return hasGuideSignals && hasIdentity;
+  }
+
   async _resolveGuideId(payload) {
     const directGuideId = String(payload.guideId || '').trim();
     if (directGuideId) {
@@ -175,23 +213,34 @@ class IntegrationService {
   async getGuides(actor) {
     if (!this.isFirebaseInitialized) return [];
 
-    const companyId = String(actor?.id || '');
-    if (this._isCompanyActor(actor) && !companyId) {
-      return [];
-    }
+    const toursQuery = this.db.collection('tourPackages');
 
-    const toursQuery = this._isCompanyActor(actor)
-      ? this.db.collection('tourPackages').where('createdByCompanyId', '==', companyId)
-      : this.db.collection('tourPackages');
-
-    const [guideDocs, packagesSnap] = await Promise.all([
-      this._getUsersByTypeVariants(['tour_guide', 'Tour Guide']),
+    const [guideDocsByType, allUsersSnap, packagesSnap] = await Promise.all([
+      this._getUsersByTypeVariants([
+        'tour_guide',
+        'Tour Guide',
+        'tour guide',
+        'guide',
+        'Guide',
+        'tourguide',
+        'TourGuide',
+        'tourGuide',
+        'tourguid',
+      ]),
+      this.db.collection('users').get(),
       toursQuery.get(),
     ]);
 
-    const guidesDocsFiltered = this._isCompanyActor(actor)
-      ? guideDocs.filter((doc) => String(doc.data().createdByCompanyId || '') === companyId)
-      : guideDocs;
+    const guideDocsById = new Map();
+    guideDocsByType.forEach((doc) => {
+      guideDocsById.set(doc.id, doc);
+    });
+    allUsersSnap.docs.forEach((doc) => {
+      if (this._looksLikeGuideUser(doc.data())) {
+        guideDocsById.set(doc.id, doc);
+      }
+    });
+    const guideDocs = [...guideDocsById.values()];
 
     const tourCountByGuide = new Map();
     packagesSnap.docs.forEach((doc) => {
@@ -200,13 +249,13 @@ class IntegrationService {
       tourCountByGuide.set(guideId, (tourCountByGuide.get(guideId) || 0) + 1);
     });
 
-    return guidesDocsFiltered.map((doc) => {
+    return guideDocs.map((doc) => {
       const u = doc.data();
       return {
         id: doc.id,
         name: u.fullName || u.email || 'Unknown Guide',
         languages: Array.isArray(u.languagesSpoken) ? u.languagesSpoken : [],
-        city: u.city || u.specialization || 'N/A',
+        city: this._guideCityFromUser(u),
         rating: this._asNumber(u.avgRating || u.rating, 0),
         totalTours: tourCountByGuide.get(doc.id) || 0,
         status: u.isProfileVerified ? 'Available' : 'Pending',

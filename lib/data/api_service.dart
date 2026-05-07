@@ -212,6 +212,25 @@ class ApiService {
     return Guide.fromJson(json);
   }
 
+  Future<Guide> updateGuide(String guideId, CreateGuideInput input) async {
+    final response = await http.put(
+      _uri('/api/guides/$guideId'),
+      headers: _headers(),
+      body: jsonEncode(input.toJson()),
+    );
+    final json = _parseResponse(response) as Map<String, dynamic>;
+    return Guide.fromJson(json);
+  }
+
+  Future<void> resetGuidePassword(String guideId, String newPassword) async {
+    final response = await http.post(
+      _uri('/api/guides/$guideId/reset-password'),
+      headers: _headers(),
+      body: jsonEncode({'password': newPassword}),
+    );
+    _parseResponse(response);
+  }
+
   Future<void> deleteGuide(String guideId) async {
     final response = await http.delete(
       _uri('/api/guides/$guideId'),

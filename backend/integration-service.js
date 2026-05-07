@@ -118,44 +118,6 @@ class IntegrationService {
     };
   }
 
-  _guideCityFromUser(user) {
-    const locationCity = user?.location && typeof user.location === 'object'
-      ? String(user.location.city || '').trim()
-      : '';
-    const city = String(user?.city || '').trim();
-    const currentCity = String(user?.currentCity || '').trim();
-    const residenceCity = String(user?.residenceCity || '').trim();
-
-    return city || locationCity || currentCity || residenceCity || 'N/A';
-  }
-
-  _looksLikeGuideUser(user) {
-    const normalized = [
-      String(user?.userType || '').trim().toLowerCase(),
-      String(user?.role || '').trim().toLowerCase(),
-      String(user?.accountType || '').trim().toLowerCase(),
-      String(user?.profileType || '').trim().toLowerCase(),
-    ].filter(Boolean);
-
-    if (normalized.some((value) => value.includes('guide'))) {
-      return true;
-    }
-
-    if (user?.isTourGuide === true || user?.guideProfile) {
-      return true;
-    }
-
-    const hasGuideSignals = Boolean(
-      user?.guideLicense
-      || user?.licenseNumber
-      || user?.yearsExperience
-      || user?.specialization,
-    );
-
-    const hasIdentity = Boolean(String(user?.fullName || user?.email || '').trim());
-    return hasGuideSignals && hasIdentity;
-  }
-
   async _resolveGuideId(payload) {
     const directGuideId = String(payload.guideId || '').trim();
     if (directGuideId) {
@@ -213,34 +175,23 @@ class IntegrationService {
   async getGuides(actor) {
     if (!this.isFirebaseInitialized) return [];
 
-    const toursQuery = this.db.collection('tourPackages');
+    const companyId = String(actor?.id || '');
+    if (this._isCompanyActor(actor) && !companyId) {
+      return [];
+    }
 
-    const [guideDocsByType, allUsersSnap, packagesSnap] = await Promise.all([
-      this._getUsersByTypeVariants([
-        'tour_guide',
-        'Tour Guide',
-        'tour guide',
-        'guide',
-        'Guide',
-        'tourguide',
-        'TourGuide',
-        'tourGuide',
-        'tourguid',
-      ]),
-      this.db.collection('users').get(),
+    const toursQuery = this._isCompanyActor(actor)
+      ? this.db.collection('tourPackages').where('createdByCompanyId', '==', companyId)
+      : this.db.collection('tourPackages');
+
+    const [guideDocs, packagesSnap] = await Promise.all([
+      this._getUsersByTypeVariants(['tour_guide', 'Tour Guide']),
       toursQuery.get(),
     ]);
 
-    const guideDocsById = new Map();
-    guideDocsByType.forEach((doc) => {
-      guideDocsById.set(doc.id, doc);
-    });
-    allUsersSnap.docs.forEach((doc) => {
-      if (this._looksLikeGuideUser(doc.data())) {
-        guideDocsById.set(doc.id, doc);
-      }
-    });
-    const guideDocs = [...guideDocsById.values()];
+    const guidesDocsFiltered = this._isCompanyActor(actor)
+      ? guideDocs.filter((doc) => String(doc.data().createdByCompanyId || '') === companyId)
+      : guideDocs;
 
     const tourCountByGuide = new Map();
     packagesSnap.docs.forEach((doc) => {
@@ -249,18 +200,62 @@ class IntegrationService {
       tourCountByGuide.set(guideId, (tourCountByGuide.get(guideId) || 0) + 1);
     });
 
-    return guideDocs.map((doc) => {
+    return guidesDocsFiltered.map((doc) => {
       const u = doc.data();
+      const langs = Array.isArray(u.languages)
+        ? u.languages
+        : Array.isArray(u.languagesSpoken)
+          ? u.languagesSpoken
+          : [];
+      const specs = Array.isArray(u.specializations) ? u.specializations : [];
+      const specialization = specs.length > 0
+        ? String(specs[0])
+        : String(u.specialization || '');
       return {
         id: doc.id,
         name: u.fullName || u.email || 'Unknown Guide',
-        languages: Array.isArray(u.languagesSpoken) ? u.languagesSpoken : [],
-        city: this._guideCityFromUser(u),
+        languages: langs.map((l) => String(l)),
+        city: u.city || 'N/A',
+        specialization,
+        yearsOfExperience: this._asNumber(u.yearsOfExperience, 0),
+        image: u.image ? String(u.image) : '',
+        phone: u.phone ? String(u.phone) : '',
+        email: u.email ? String(u.email) : '',
         rating: this._asNumber(u.avgRating || u.rating, 0),
         totalTours: tourCountByGuide.get(doc.id) || 0,
         status: u.isProfileVerified ? 'Available' : 'Pending',
       };
     });
+  }
+
+  _buildGuidePayload(payload, { isCreate = false } = {}) {
+    const doc = {};
+    if (payload.name !== undefined) doc.fullName = String(payload.name).trim();
+    if (payload.city !== undefined) doc.city = String(payload.city).trim();
+    if (Array.isArray(payload.languages)) {
+      const langs = payload.languages.map((l) => String(l).trim()).filter(Boolean);
+      doc.languages = langs;
+      doc.languagesSpoken = langs;
+    }
+    if (payload.email !== undefined) doc.email = String(payload.email);
+    if (payload.phone !== undefined) doc.phone = String(payload.phone);
+    if (payload.specialization !== undefined) {
+      const s = String(payload.specialization).trim();
+      doc.specialization = s;
+      doc.specializations = s ? [s] : [];
+    }
+    if (payload.yearsOfExperience !== undefined) {
+      doc.yearsOfExperience = this._asNumber(payload.yearsOfExperience, 0);
+    }
+    if (payload.image !== undefined) doc.image = String(payload.image);
+    if (isCreate) {
+      doc.userType = 'Tour Guide';
+      doc.isProfileVerified = true;
+      doc.avgRating = 0;
+      doc.createdAt = admin.firestore.FieldValue.serverTimestamp();
+    }
+    doc.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+    return doc;
   }
 
   async createGuide(payload, actor) {
@@ -270,24 +265,33 @@ class IntegrationService {
 
     const name = String(payload.name || '').trim();
     const city = String(payload.city || '').trim();
+    const email = String(payload.email || '').trim();
+    const password = String(payload.password || '').trim();
     if (!name || !city) {
       throw new Error('name and city are required');
     }
+    if (!email) {
+      throw new Error('email is required to create a login for the guide');
+    }
+    if (!password || password.length < 6) {
+      throw new Error('password must be at least 6 characters');
+    }
 
-    const doc = {
-      fullName: name,
-      city,
-      userType: 'tour_guide',
-      languagesSpoken: Array.isArray(payload.languages)
-        ? payload.languages.map((item) => String(item))
-        : [],
-      email: payload.email ? String(payload.email) : '',
-      phone: payload.phone ? String(payload.phone) : '',
-      isProfileVerified: true,
-      avgRating: 0,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
+    let authUser;
+    try {
+      authUser = await admin.auth().createUser({
+        email,
+        password,
+        displayName: name,
+      });
+    } catch (err) {
+      if (err.code === 'auth/email-already-exists') {
+        throw new Error('An account with this email already exists');
+      }
+      throw new Error(err.message || 'Failed to create login account');
+    }
+
+    const doc = this._buildGuidePayload(payload, { isCreate: true });
 
     if (this._isCompanyActor(actor)) {
       doc.createdByCompanyId = String(actor.id || '');
@@ -295,15 +299,133 @@ class IntegrationService {
       doc.createdByCompanyName = String(actor.name || '');
     }
 
-    const ref = await this.db.collection('users').add(doc);
+    try {
+      await this.db.collection('users').doc(authUser.uid).set(doc);
+    } catch (err) {
+      try {
+        await admin.auth().deleteUser(authUser.uid);
+      } catch (_) {}
+      throw err;
+    }
+
     return {
-      id: ref.id,
+      id: authUser.uid,
       name: doc.fullName,
-      languages: doc.languagesSpoken,
+      languages: doc.languages || [],
       city: doc.city,
+      specialization: doc.specialization || '',
+      yearsOfExperience: doc.yearsOfExperience || 0,
+      image: doc.image || '',
+      phone: doc.phone || '',
+      email,
       rating: 0,
       totalTours: 0,
       status: 'Available',
+    };
+  }
+
+  async resetGuidePassword(guideId, newPassword, actor) {
+    if (!this.isFirebaseInitialized) {
+      throw new Error('Firebase is not initialized');
+    }
+    const id = String(guideId || '').trim();
+    if (!id) throw new Error('guideId is required');
+    const password = String(newPassword || '').trim();
+    if (!password || password.length < 6) {
+      throw new Error('password must be at least 6 characters');
+    }
+
+    const snap = await this.db.collection('users').doc(id).get();
+    if (!snap.exists) throw new Error('Guide not found');
+    const guideData = snap.data() || {};
+
+    if (this._isCompanyActor(actor)) {
+      const ownerId = String(guideData.createdByCompanyId || '');
+      const companyId = String(actor?.id || '');
+      if (!companyId || ownerId !== companyId) {
+        throw new Error('Forbidden');
+      }
+    }
+
+    try {
+      await admin.auth().updateUser(id, { password });
+      return { success: true, created: false };
+    } catch (err) {
+      if (err.code !== 'auth/user-not-found') {
+        throw new Error(err.message || 'Failed to reset password');
+      }
+    }
+
+    const email = String(guideData.email || '').trim();
+    if (!email) {
+      throw new Error(
+        'This guide has no email on file. Edit the guide and add an email first.',
+      );
+    }
+
+    try {
+      await admin.auth().createUser({
+        uid: id,
+        email,
+        password,
+        displayName: guideData.fullName || '',
+      });
+    } catch (err) {
+      if (err.code === 'auth/email-already-exists') {
+        throw new Error(
+          'An auth account already exists with this email under a different ID. Change the email or contact support.',
+        );
+      }
+      throw new Error(err.message || 'Failed to create login account');
+    }
+    return { success: true, created: true, email };
+  }
+
+  async updateGuide(guideId, payload, actor) {
+    if (!this.isFirebaseInitialized) {
+      throw new Error('Firebase is not initialized');
+    }
+    const id = String(guideId || '').trim();
+    if (!id) throw new Error('guideId is required');
+
+    const ref = this.db.collection('users').doc(id);
+    const existing = await ref.get();
+    if (!existing.exists) throw new Error('Guide not found');
+
+    if (this._isCompanyActor(actor)) {
+      const data = existing.data() || {};
+      const ownerId = String(data.createdByCompanyId || '');
+      const companyId = String(actor?.id || '');
+      if (!companyId || ownerId !== companyId) {
+        throw new Error('Forbidden');
+      }
+    }
+
+    const patch = this._buildGuidePayload(payload);
+    await ref.update(patch);
+
+    const snap = await ref.get();
+    const u = snap.data() || {};
+    const langs = Array.isArray(u.languages)
+      ? u.languages
+      : Array.isArray(u.languagesSpoken)
+        ? u.languagesSpoken
+        : [];
+    const specs = Array.isArray(u.specializations) ? u.specializations : [];
+    return {
+      id: snap.id,
+      name: u.fullName || '',
+      languages: langs.map((l) => String(l)),
+      city: u.city || '',
+      specialization:
+        specs.length > 0 ? String(specs[0]) : String(u.specialization || ''),
+      yearsOfExperience: this._asNumber(u.yearsOfExperience, 0),
+      image: u.image ? String(u.image) : '',
+      phone: u.phone ? String(u.phone) : '',
+      email: u.email ? String(u.email) : '',
+      rating: this._asNumber(u.avgRating || u.rating, 0),
+      totalTours: 0,
+      status: u.isProfileVerified ? 'Available' : 'Pending',
     };
   }
 
@@ -1149,88 +1271,208 @@ class IntegrationService {
     return reviews;
   }
 
-  async getRewards() {
-    if (!this.isFirebaseInitialized) return [];
-
-    const snap = await this.db.collection('rewards').get();
-    return snap.docs.map((doc) => {
-      const r = doc.data();
-      return {
-        id: doc.id,
-        title: r.title || '',
-        description: r.description || '',
-        type: r.type || 'points',
-        value: String(r.value || ''),
-        minimumBookings: this._asNumber(r.minimumBookings, 0),
-        validUntil: r.validUntil || null,
-        status: r.status === 'inactive' ? 'inactive' : 'active',
-      };
-    });
-  }
-
-  async createReward(data) {
-    if (!this.isFirebaseInitialized) {
-      throw new Error('Firebase is not initialized');
+  _serializeReward(doc) {
+    const r = doc.data() || {};
+    const isActive = typeof r.isActive === 'boolean'
+      ? r.isActive
+      : r.status !== 'inactive';
+    let validUntil = null;
+    if (r.validUntil) {
+      if (typeof r.validUntil.toDate === 'function') {
+        validUntil = r.validUntil.toDate().toISOString().slice(0, 10);
+      } else if (typeof r.validUntil === 'string') {
+        validUntil = r.validUntil.slice(0, 10);
+      }
     }
-
-    const doc = {
-      title: String(data.title),
-      description: data.description ? String(data.description) : '',
-      type: String(data.type),
-      value: String(data.value),
-      minimumBookings: this._asNumber(data.minimumBookings, 0),
-      validUntil: data.validUntil || null,
-      status: data.status === 'inactive' ? 'inactive' : 'active',
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-
-    const ref = await this.db.collection('rewards').add(doc);
+    const applicableTours = Array.isArray(r.applicableTours)
+      ? r.applicableTours.map((t) => String(t))
+      : [];
     return {
-      id: ref.id,
-      title: doc.title,
-      description: doc.description,
-      type: doc.type,
-      value: doc.value,
-      minimumBookings: doc.minimumBookings,
-      validUntil: doc.validUntil,
-      status: doc.status,
-    };
-  }
-
-  async updateReward(id, data) {
-    if (!this.isFirebaseInitialized) {
-      throw new Error('Firebase is not initialized');
-    }
-
-    const patch = { ...data, updatedAt: admin.firestore.FieldValue.serverTimestamp() };
-    delete patch.id;
-    await this.db.collection('rewards').doc(id).update(patch);
-    const snap = await this.db.collection('rewards').doc(id).get();
-    if (!snap.exists) throw new Error('Reward not found');
-    const r = snap.data() || {};
-
-    return {
-      id: snap.id,
+      id: doc.id,
+      type: r.type || 'tour_discount',
+      createdBy: r.createdBy || 'company',
+      creatorId: r.creatorId || r.companyId || '',
+      companyId: r.companyId || '',
       title: r.title || '',
       description: r.description || '',
-      type: r.type || 'points',
-      value: String(r.value || ''),
-      minimumBookings: this._asNumber(r.minimumBookings, 0),
-      validUntil: r.validUntil || null,
-      status: r.status === 'inactive' ? 'inactive' : 'active',
+      discountPercent: this._asNumber(r.discountPercent, 0),
+      requiredLevel: this._asNumber(r.requiredLevel, 1),
+      applicableTours,
+      partnerName: r.partnerName || '',
+      partnerCategory: r.partnerCategory || '',
+      partnerLocation: r.partnerLocation || '',
+      redemptionCode: r.redemptionCode || '',
+      isActive,
+      validUntil,
+      totalAppliedCount: this._asNumber(r.totalAppliedCount, 0),
     };
   }
 
-  async setRewardStatus(id, status) {
-    return this.updateReward(id, { status });
+  _buildRewardDoc(data, { isCreate = false } = {}) {
+    const doc = {};
+    if (data.type !== undefined) doc.type = String(data.type);
+    if (data.title !== undefined) doc.title = String(data.title).trim();
+    if (data.description !== undefined) {
+      doc.description = String(data.description);
+    }
+    if (data.discountPercent !== undefined) {
+      doc.discountPercent = this._asNumber(data.discountPercent, 0);
+    }
+    if (data.requiredLevel !== undefined) {
+      doc.requiredLevel = this._asNumber(data.requiredLevel, 1);
+    }
+    if (Array.isArray(data.applicableTours)) {
+      doc.applicableTours = data.applicableTours
+        .map((t) => String(t).trim())
+        .filter(Boolean);
+    }
+    if (data.partnerName !== undefined) {
+      doc.partnerName = String(data.partnerName);
+    }
+    if (data.partnerCategory !== undefined) {
+      doc.partnerCategory = String(data.partnerCategory);
+    }
+    if (data.partnerLocation !== undefined) {
+      doc.partnerLocation = String(data.partnerLocation);
+    }
+    if (data.redemptionCode !== undefined) {
+      doc.redemptionCode = String(data.redemptionCode).trim();
+    }
+    if (data.isActive !== undefined) {
+      doc.isActive = Boolean(data.isActive);
+    } else if (data.status !== undefined) {
+      doc.isActive = data.status !== 'inactive';
+    }
+    if (data.validUntil) {
+      const parsed = new Date(data.validUntil);
+      if (!Number.isNaN(parsed.getTime())) {
+        doc.validUntil = admin.firestore.Timestamp.fromDate(parsed);
+      }
+    } else if (data.validUntil === null) {
+      doc.validUntil = null;
+    }
+    if (isCreate) {
+      doc.totalAppliedCount = 0;
+      doc.createdAt = admin.firestore.FieldValue.serverTimestamp();
+    }
+    doc.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+    return doc;
   }
 
-  async deleteReward(id) {
+  _validateRewardForCreate(doc) {
+    if (!doc.title || !doc.title.trim()) {
+      throw new Error('Title is required');
+    }
+    const type = doc.type || 'tour_discount';
+    if (type !== 'tour_discount' && type !== 'partner_coupon') {
+      throw new Error('Invalid reward type');
+    }
+    const disc = this._asNumber(doc.discountPercent, 0);
+    if (disc < 1 || disc > 100) {
+      throw new Error('Discount must be between 1 and 100');
+    }
+    if (!Array.isArray(doc.applicableTours) || doc.applicableTours.length === 0) {
+      throw new Error('Select at least one tour');
+    }
+    if (type === 'partner_coupon') {
+      if (!(doc.partnerName || '').trim()) {
+        throw new Error('Partner name is required for coupons');
+      }
+      if (!(doc.redemptionCode || '').trim()) {
+        throw new Error('Redemption code is required for coupons');
+      }
+    }
+  }
+
+  async getRewards(actor) {
+    if (!this.isFirebaseInitialized) return [];
+
+    let query = this.db.collection('rewards');
+    if (this._isCompanyActor(actor)) {
+      const companyId = String(actor?.id || '');
+      if (!companyId) return [];
+      query = query.where('companyId', '==', companyId);
+    }
+
+    const snap = await query.get();
+    const rewards = snap.docs.map((doc) => this._serializeReward(doc));
+    rewards.sort((a, b) => (b.id || '').localeCompare(a.id || ''));
+    return rewards;
+  }
+
+  async createReward(data, actor) {
     if (!this.isFirebaseInitialized) {
       throw new Error('Firebase is not initialized');
     }
-    await this.db.collection('rewards').doc(id).delete();
+
+    const doc = this._buildRewardDoc(data, { isCreate: true });
+    if (!doc.type) doc.type = 'tour_discount';
+    if (doc.isActive === undefined) doc.isActive = true;
+    if (doc.requiredLevel === undefined) doc.requiredLevel = 1;
+
+    if (this._isCompanyActor(actor)) {
+      const companyId = String(actor.id || '');
+      if (!companyId) throw new Error('Company actor missing id');
+      doc.createdBy = 'company';
+      doc.creatorId = companyId;
+      doc.companyId = companyId;
+    } else {
+      doc.createdBy = data.createdBy || 'admin';
+      doc.creatorId = data.creatorId || String(actor?.id || '');
+      doc.companyId = data.companyId || '';
+    }
+
+    this._validateRewardForCreate(doc);
+
+    const ref = await this.db.collection('rewards').add(doc);
+    const snap = await ref.get();
+    return this._serializeReward(snap);
+  }
+
+  async updateReward(id, data, actor) {
+    if (!this.isFirebaseInitialized) {
+      throw new Error('Firebase is not initialized');
+    }
+
+    const ref = this.db.collection('rewards').doc(id);
+    const existing = await ref.get();
+    if (!existing.exists) throw new Error('Reward not found');
+
+    if (this._isCompanyActor(actor)) {
+      const companyId = String(actor?.id || '');
+      const ownerId = String(existing.data()?.companyId || '');
+      if (!companyId || ownerId !== companyId) {
+        throw new Error('Forbidden');
+      }
+    }
+
+    const patch = this._buildRewardDoc(data);
+    delete patch.id;
+    await ref.update(patch);
+    const snap = await ref.get();
+    return this._serializeReward(snap);
+  }
+
+  async setRewardStatus(id, status, actor) {
+    const isActive = status !== 'inactive';
+    return this.updateReward(id, { isActive }, actor);
+  }
+
+  async deleteReward(id, actor) {
+    if (!this.isFirebaseInitialized) {
+      throw new Error('Firebase is not initialized');
+    }
+    const ref = this.db.collection('rewards').doc(id);
+    if (this._isCompanyActor(actor)) {
+      const existing = await ref.get();
+      if (!existing.exists) throw new Error('Reward not found');
+      const companyId = String(actor?.id || '');
+      const ownerId = String(existing.data()?.companyId || '');
+      if (!companyId || ownerId !== companyId) {
+        throw new Error('Forbidden');
+      }
+    }
+    await ref.delete();
   }
 
   async getDashboardOverview(actor) {

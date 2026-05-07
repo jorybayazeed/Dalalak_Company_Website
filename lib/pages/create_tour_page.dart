@@ -425,17 +425,22 @@ class _CreateTourPageState extends State<CreateTourPage> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: SizedBox(
-                        height: 300,
+                        height: 380,
                         child: FlutterMap(
                           mapController: _mapController,
                           options: MapOptions(
-                            center: _selectedMapLocation ?? LatLng(24.7136, 46.6753),
-                            zoom: 13.0,
-                            interactiveFlags: InteractiveFlag.all,
+                            initialCenter: _selectedMapLocation ?? LatLng(24.7136, 46.6753),
+                            initialZoom: 15.0,
+                            maxZoom: 19.0,
+                            minZoom: 4.0,
+                            interactionOptions: const InteractionOptions(
+                              flags: InteractiveFlag.all,
+                            ),
                             onTap: (tapPosition, point) {
                               setState(() {
                                 _selectedMapLocation = point;
-                                _mapLocationController.text = '${point.latitude}, ${point.longitude}';
+                                _mapLocationController.text =
+                                    '${point.latitude.toStringAsFixed(6)}, ${point.longitude.toStringAsFixed(6)}';
                               });
                             },
                           ),

@@ -113,10 +113,15 @@ class _CompanyRequestsPageState extends State<CompanyRequestsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Text('Company Registration Requests', style: Theme.of(context).textTheme.titleLarge),
-            const Spacer(),
+            Text(
+              'Company Registration Requests',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             SegmentedButton<String>(
               segments: const [
                 ButtonSegment(value: 'pending', label: Text('Pending')),
@@ -130,7 +135,6 @@ class _CompanyRequestsPageState extends State<CompanyRequestsPage> {
                 _load();
               },
             ),
-            const SizedBox(width: 12),
             IconButton(
               onPressed: _load,
               icon: const Icon(Icons.refresh),

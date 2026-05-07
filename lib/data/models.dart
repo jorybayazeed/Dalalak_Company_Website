@@ -217,6 +217,10 @@ class CreateGuideInput {
     required this.languages,
     this.email,
     this.phone,
+    this.specialization,
+    this.yearsOfExperience,
+    this.image,
+    this.password,
   });
 
   final String name;
@@ -224,14 +228,22 @@ class CreateGuideInput {
   final List<String> languages;
   final String? email;
   final String? phone;
+  final String? specialization;
+  final int? yearsOfExperience;
+  final String? image;
+  final String? password;
 
   Map<String, dynamic> toJson() {
     return {
       'name': name,
       'city': city,
       'languages': languages,
-      'email': email,
-      'phone': phone,
+      if (email != null) 'email': email,
+      if (phone != null) 'phone': phone,
+      if (specialization != null) 'specialization': specialization,
+      if (yearsOfExperience != null) 'yearsOfExperience': yearsOfExperience,
+      if (image != null) 'image': image,
+      if (password != null) 'password': password,
     };
   }
 }
@@ -307,6 +319,11 @@ class Guide {
     required this.rating,
     required this.totalTours,
     required this.status,
+    this.specialization = '',
+    this.yearsOfExperience = 0,
+    this.image = '',
+    this.phone = '',
+    this.email = '',
   });
 
   final String id;
@@ -316,6 +333,11 @@ class Guide {
   final double rating;
   final int totalTours;
   final String status;
+  final String specialization;
+  final int yearsOfExperience;
+  final String image;
+  final String phone;
+  final String email;
 
   String get languagesText => languages.join(', ');
 
@@ -323,11 +345,18 @@ class Guide {
     return Guide(
       id: json['id'] as String,
       name: json['name'] as String,
-      languages: (json['languages'] as List<dynamic>).map((item) => item as String).toList(),
-      city: json['city'] as String,
-      rating: (json['rating'] as num).toDouble(),
-      totalTours: (json['totalTours'] as num).toInt(),
-      status: json['status'] as String,
+      languages: (json['languages'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .toList(),
+      city: (json['city'] as String?) ?? '',
+      rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
+      totalTours: (json['totalTours'] as num?)?.toInt() ?? 0,
+      specialization: (json['specialization'] as String?) ?? '',
+      yearsOfExperience: (json['yearsOfExperience'] as num?)?.toInt() ?? 0,
+      image: (json['image'] as String?) ?? '',
+      phone: (json['phone'] as String?) ?? '',
+      email: (json['email'] as String?) ?? '',
+      status: (json['status'] as String?) ?? 'Available',
     );
   }
 }
@@ -413,48 +442,62 @@ class NotificationItem {
 class Reward {
   const Reward({
     required this.id,
+    required this.type,
     required this.title,
     required this.description,
-    required this.type,
-    required this.value,
-    required this.minimumBookings,
+    required this.discountPercent,
+    required this.requiredLevel,
+    required this.applicableTours,
+    this.partnerName = '',
+    this.partnerCategory = '',
+    this.partnerLocation = '',
+    this.redemptionCode = '',
+    required this.isActive,
     this.validUntil,
-    required this.status,
+    required this.totalAppliedCount,
   });
 
   final String id;
+  final String type;
   final String title;
   final String description;
-  final String type;
-  final String value;
-  final int minimumBookings;
+  final int discountPercent;
+  final int requiredLevel;
+  final List<String> applicableTours;
+  final String partnerName;
+  final String partnerCategory;
+  final String partnerLocation;
+  final String redemptionCode;
+  final bool isActive;
   final String? validUntil;
-  final String status;
+  final int totalAppliedCount;
 
-  bool get isActive => status == 'active';
+  bool get isPartnerCoupon => type == 'partner_coupon';
 
   factory Reward.fromJson(Map<String, dynamic> json) {
+    final toursRaw = json['applicableTours'];
+    final tours = toursRaw is List
+        ? toursRaw.map((e) => e.toString()).toList()
+        : <String>[];
     return Reward(
       id: json['id'] as String,
-      title: json['title'] as String,
+      type: (json['type'] as String?) ?? 'tour_discount',
+      title: (json['title'] as String?) ?? '',
       description: (json['description'] as String?) ?? '',
-      type: json['type'] as String,
-      value: json['value'] as String,
-      minimumBookings: (json['minimumBookings'] as num?)?.toInt() ?? 0,
+      discountPercent: (json['discountPercent'] as num?)?.toInt() ?? 0,
+      requiredLevel: (json['requiredLevel'] as num?)?.toInt() ?? 1,
+      applicableTours: tours,
+      partnerName: (json['partnerName'] as String?) ?? '',
+      partnerCategory: (json['partnerCategory'] as String?) ?? '',
+      partnerLocation: (json['partnerLocation'] as String?) ?? '',
+      redemptionCode: (json['redemptionCode'] as String?) ?? '',
+      isActive: json['isActive'] is bool
+          ? json['isActive'] as bool
+          : (json['status'] as String?) != 'inactive',
       validUntil: json['validUntil'] as String?,
-      status: json['status'] as String,
+      totalAppliedCount: (json['totalAppliedCount'] as num?)?.toInt() ?? 0,
     );
   }
-
-  Map<String, dynamic> toJson() => {
-        'title': title,
-        'description': description,
-        'type': type,
-        'value': value,
-        'minimumBookings': minimumBookings,
-        'validUntil': validUntil,
-        'status': status,
-      };
 }
 
 class ReportSummary {

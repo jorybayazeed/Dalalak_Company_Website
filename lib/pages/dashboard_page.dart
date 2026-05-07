@@ -287,7 +287,11 @@ class _MiniChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final max = points.isEmpty ? 1.0 : points.reduce((a, b) => a > b ? a : b).toDouble();
+    final rawMax = points.isEmpty
+        ? 0
+        : points.reduce((a, b) => a > b ? a : b);
+    final max = rawMax > 0 ? rawMax.toDouble() : 1.0;
+    final allZero = rawMax == 0;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -300,37 +304,48 @@ class _MiniChartCard extends StatelessWidget {
         children: [
           Text(title, style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 12),
-          if (points.isEmpty)
-            Text('No booking trend data yet.', style: Theme.of(context).textTheme.bodySmall)
+          if (points.isEmpty || allZero)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                child: Text(
+                  'No booking trend data yet.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            )
           else
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: List.generate(points.length, (i) {
-                final value = points[i].toDouble();
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 500),
-                          height: 12 + (value / max * 120),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(8),
+            SizedBox(
+              height: 160,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: List.generate(points.length, (i) {
+                  final value = points[i].toDouble();
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 500),
+                            height: 12 + (value / max * 120),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          i < labels.length ? labels[i] : '',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
+                          const SizedBox(height: 6),
+                          Text(
+                            i < labels.length ? labels[i] : '',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              }),
+                  );
+                }),
+              ),
             ),
         ],
       ),

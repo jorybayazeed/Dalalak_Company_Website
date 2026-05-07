@@ -1,9 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../data/api_service.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
 import 'package:dalalak_company_website/widgets/common_widgets.dart';
+
+LatLng? _parseLatLng(String raw) {
+  final parts = raw.split(',');
+  if (parts.length != 2) return null;
+  final lat = double.tryParse(parts[0].trim());
+  final lng = double.tryParse(parts[1].trim());
+  if (lat == null || lng == null || lat.isNaN || lng.isNaN) return null;
+  return LatLng(lat, lng);
+}
 
 class ToursPage extends StatefulWidget {
   const ToursPage({
@@ -119,6 +130,8 @@ class _ToursPageState extends State<ToursPage> {
     final durationController = TextEditingController(text: tour.duration);
     final descriptionController = TextEditingController(text: tour.description);
     final mapLocationController = TextEditingController(text: tour.mapLocation);
+    LatLng? selectedLatLng = _parseLatLng(tour.mapLocation);
+    final mapCtrl = MapController();
 
     try {
       final guides = await widget.api.getGuides();
@@ -172,7 +185,70 @@ class _ToursPageState extends State<ToursPage> {
                           decoration: const InputDecoration(labelText: 'Guide'),
                         ),
                         const SizedBox(height: 10),
-                        _EditField(label: 'Map Location', controller: mapLocationController),
+                        _EditField(
+                          label: 'Map Location (lat, lng)',
+                          controller: mapLocationController,
+                        ),
+                        const SizedBox(height: 8),
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Click on the map to update the tour location',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: SizedBox(
+                            height: 320,
+                            child: FlutterMap(
+                              mapController: mapCtrl,
+                              options: MapOptions(
+                                initialCenter: selectedLatLng ??
+                                    LatLng(24.7136, 46.6753),
+                                initialZoom: 15.0,
+                                maxZoom: 19.0,
+                                minZoom: 4.0,
+                                interactionOptions: const InteractionOptions(
+                                  flags: InteractiveFlag.all,
+                                ),
+                                onTap: (tapPosition, point) {
+                                  setInnerState(() {
+                                    selectedLatLng = point;
+                                    mapLocationController.text =
+                                        '${point.latitude.toStringAsFixed(6)}, ${point.longitude.toStringAsFixed(6)}';
+                                  });
+                                },
+                              ),
+                              children: [
+                                TileLayer(
+                                  urlTemplate:
+                                      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                  subdomains: const ['a', 'b', 'c'],
+                                  userAgentPackageName:
+                                      'com.dalelak.companywebsite',
+                                ),
+                                if (selectedLatLng != null)
+                                  MarkerLayer(
+                                    markers: [
+                                      Marker(
+                                        point: selectedLatLng!,
+                                        width: 40,
+                                        height: 40,
+                                        alignment: Alignment.topCenter,
+                                        child: const Icon(
+                                          Icons.location_on,
+                                          color: Colors.red,
+                                          size: 36,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: 10),
                         _EditField(label: 'Description', controller: descriptionController, lines: 3),
                       ],

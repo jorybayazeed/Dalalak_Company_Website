@@ -35,6 +35,12 @@ class DalelakCompanyApp extends StatefulWidget {
 }
 
 class _DalelakCompanyAppState extends State<DalelakCompanyApp> {
+  // Default backend URL — points to the live Render deployment so anyone who
+  // clones the repo and runs `flutter run` immediately gets a working app
+  // (login, dashboards, etc.) without needing a local backend.
+  // Override at build time with: --dart-define=DALALAK_API_URL=http://localhost:4000
+  static const String _defaultApiUrl = 'https://dalalak-app.onrender.com';
+
   static String _resolveApiUrl() {
     const configured = String.fromEnvironment('DALALAK_API_URL', defaultValue: '');
     if (configured.isNotEmpty) {
@@ -59,7 +65,8 @@ class _DalelakCompanyAppState extends State<DalelakCompanyApp> {
       }
     }
 
-    return 'http://localhost:4000';
+    // Default: use the live Render backend (works without any local setup).
+    return _defaultApiUrl;
   }
 
   final ApiService _api = ApiService(baseUrl: _resolveApiUrl());

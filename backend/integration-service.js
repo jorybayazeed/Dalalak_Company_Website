@@ -1646,6 +1646,366 @@ class IntegrationService {
     };
   }
 
+  async getPerformanceMetrics(actor) {
+    if (!this.isFirebaseInitialized) {
+      throw new Error('Firebase is not initialized');
+    }
+
+    const [tours, bookings, reviews, guides] = await Promise.all([
+      this.getTours(actor),
+      this.getBookings(actor),
+      this.getReviews(),
+      this.getGuides(actor),
+    ]);
+
+    const allowedTourIds = new Set(tours.map((t) => t.id));
+    const allowedGuideNames = new Set(guides.map((g) => g.name));
+    const scopedReviews = this._isCompanyActor(actor)
+      ? reviews.filter((r) => allowedGuideNames.has(r.guideName))
+      : reviews;
+
+    const totalBookings = bookings.length;
+    const confirmedBookings = bookings.filter((b) => b.status === 'Confirmed').length;
+    const completedBookings = bookings.filter((b) => b.status === 'Completed').length;
+    const cancelledBookings = bookings.filter((b) => b.status === 'Cancelled').length;
+
+    const totalCapacity = tours.reduce((sum, t) => sum + this._asNumber(t.capacity, 0), 0);
+    const totalParticipants = bookings
+      .filter((b) => b.status === 'Confirmed' || b.status === 'Completed')
+      .reduce((sum, b) => sum + this._asNumber(b.participants, 0), 0);
+    const fillRate = totalCapacity === 0
+      ? 0
+      : Number(((totalParticipants / totalCapacity) * 100).toFixed(1));
+
+    const completionRate = totalBookings === 0
+      ? 0
+      : Number(((completedBookings / totalBookings) * 100).toFixed(1));
+
+    const overallSatisfaction = scopedReviews.length === 0
+      ? 0
+      : Number(
+          (scopedReviews.reduce((s, r) => s + this._asNumber(r.rating, 0), 0) / scopedReviews.length)
+            .toFixed(2),
+        );
+
+    const guideStats = new Map();
+    guides.forEach((g) => {
+      guideStats.set(g.name, {
+        guideId: g.id,
+        name: g.name,
+        ratingSum: 0,
+        ratingCount: 0,
+        toursCount: g.totalTours || 0,
+      });
+    });
+    scopedReviews.forEach((r) => {
+      const entry = guideStats.get(r.guideName);
+      if (!entry) return;
+      entry.ratingSum += this._asNumber(r.rating, 0);
+      entry.ratingCount += 1;
+    });
+
+    const guidePerformance = [...guideStats.values()]
+      .map((entry) => ({
+        guideId: entry.guideId,
+        name: entry.name,
+        averageRating: entry.ratingCount === 0
+          ? 0
+          : Number((entry.ratingSum / entry.ratingCount).toFixed(2)),
+        reviewsCount: entry.ratingCount,
+        toursCount: entry.toursCount,
+      }))
+      .sort((a, b) => b.averageRating - a.averageRating);
+
+    const tourParticipationMap = new Map();
+    tours.forEach((t) => {
+      tourParticipationMap.set(t.id, {
+        tourId: t.id,
+        name: t.name,
+        capacity: this._asNumber(t.capacity, 0),
+        bookings: 0,
+        participants: 0,
+      });
+    });
+    bookings.forEach((b) => {
+      if (!allowedTourIds.has(b.tourId)) return;
+      const entry = tourParticipationMap.get(b.tourId);
+      if (!entry) return;
+      entry.bookings += 1;
+      if (b.status === 'Confirmed' || b.status === 'Completed') {
+        entry.participants += this._asNumber(b.participants, 0);
+      }
+    });
+
+    const tourParticipation = [...tourParticipationMap.values()]
+      .map((entry) => ({
+        ...entry,
+        fillRate: entry.capacity === 0
+          ? 0
+          : Number(((entry.participants / entry.capacity) * 100).toFixed(1)),
+      }))
+      .sort((a, b) => b.participants - a.participants)
+      .slice(0, 8);
+
+    const ratingBuckets = { five: 0, four: 0, three: 0, two: 0, one: 0 };
+    scopedReviews.forEach((r) => {
+      const v = Math.round(this._asNumber(r.rating, 0));
+      if (v >= 5) ratingBuckets.five += 1;
+      else if (v === 4) ratingBuckets.four += 1;
+      else if (v === 3) ratingBuckets.three += 1;
+      else if (v === 2) ratingBuckets.two += 1;
+      else if (v >= 1) ratingBuckets.one += 1;
+    });
+
+    return {
+      totalBookings,
+      confirmedBookings,
+      completedBookings,
+      cancelledBookings,
+      totalParticipants,
+      totalCapacity,
+      fillRate,
+      completionRate,
+      overallSatisfaction,
+      reviewsCount: scopedReviews.length,
+      guidePerformance,
+      tourParticipation,
+      ratingDistribution: ratingBuckets,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  async exportCompanyBackup(actor) {
+    if (!this.isFirebaseInitialized) {
+      throw new Error('Firebase is not initialized');
+    }
+
+    const [tours, guides, bookings, customers, reviews, rewards, profile] = await Promise.all([
+      this.getTours(actor),
+      this.getGuides(actor),
+      this.getBookings(actor),
+      this.getCustomers(actor),
+      this.getReviews(),
+      this.getRewards(actor),
+      this._isCompanyActor(actor)
+        ? this.getCompanyProfile(actor).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+
+    const allowedTourIds = new Set(tours.map((t) => t.id));
+    const allowedGuideNames = new Set(guides.map((g) => g.name));
+    const scopedReviews = this._isCompanyActor(actor)
+      ? reviews.filter((r) => allowedGuideNames.has(r.guideName))
+      : reviews;
+    const scopedBookings = this._isCompanyActor(actor)
+      ? bookings.filter((b) => allowedTourIds.has(b.tourId))
+      : bookings;
+
+    return {
+      version: 1,
+      type: 'company-backup',
+      generatedAt: new Date().toISOString(),
+      company: profile
+        ? {
+            id: String(actor?.id || ''),
+            name: profile.companyName || actor?.name || '',
+            email: profile.contactEmail || actor?.email || '',
+          }
+        : {
+            id: String(actor?.id || ''),
+            name: actor?.name || '',
+            email: actor?.email || '',
+            role: actor?.role || '',
+          },
+      counts: {
+        tours: tours.length,
+        guides: guides.length,
+        bookings: scopedBookings.length,
+        customers: customers.length,
+        reviews: scopedReviews.length,
+        rewards: rewards.length,
+      },
+      tours,
+      guides,
+      bookings: scopedBookings,
+      customers,
+      reviews: scopedReviews,
+      rewards,
+    };
+  }
+
+  async logBackupToFirebase(actor, backup) {
+    if (!this.isFirebaseInitialized) return null;
+    try {
+      const ref = await this.db.collection('companyBackups').add({
+        companyId: String(actor?.id || ''),
+        companyName: String(actor?.name || ''),
+        actorEmail: String(actor?.email || ''),
+        actorRole: String(actor?.role || ''),
+        type: backup.type || 'company-backup',
+        counts: backup.counts || {},
+        generatedAt: backup.generatedAt || new Date().toISOString(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return ref.id;
+    } catch (error) {
+      console.warn('Failed to log backup to Firestore:', error.message);
+      return null;
+    }
+  }
+
+  async exportBackup() {
+    if (!this.isFirebaseInitialized) {
+      throw new Error('Firebase is not initialized');
+    }
+
+    const collectionsToBackup = [
+      'users',
+      'tourPackages',
+      'companyAccounts',
+      'companyProfiles',
+      'companyRegistrationRequests',
+      'rewards',
+    ];
+
+    const data = {};
+    for (const name of collectionsToBackup) {
+      const snap = await this.db.collection(name).get();
+      data[name] = snap.docs.map((doc) => ({
+        id: doc.id,
+        data: this._serializeForBackup(doc.data()),
+      }));
+
+      if (name === 'users') {
+        const subCollections = ['upcomingBookings', 'points_events', 'quiz_attempts', 'challenge_attempts'];
+        data[`${name}__subcollections`] = {};
+        for (const userDoc of snap.docs) {
+          const userBlock = {};
+          for (const sub of subCollections) {
+            const subSnap = await this.db.collection('users').doc(userDoc.id).collection(sub).get();
+            if (subSnap.empty) continue;
+            userBlock[sub] = subSnap.docs.map((d) => ({
+              id: d.id,
+              data: this._serializeForBackup(d.data()),
+            }));
+          }
+          if (Object.keys(userBlock).length > 0) {
+            data[`${name}__subcollections`][userDoc.id] = userBlock;
+          }
+        }
+      }
+
+      if (name === 'tourPackages') {
+        data[`${name}__ratings`] = {};
+        for (const pkgDoc of snap.docs) {
+          const ratingsSnap = await this.db.collection('tourPackages').doc(pkgDoc.id).collection('ratings').get();
+          if (ratingsSnap.empty) continue;
+          data[`${name}__ratings`][pkgDoc.id] = ratingsSnap.docs.map((d) => ({
+            id: d.id,
+            data: this._serializeForBackup(d.data()),
+          }));
+        }
+      }
+    }
+
+    return {
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      collections: data,
+    };
+  }
+
+  _serializeForBackup(value) {
+    if (value === null || value === undefined) return value;
+    if (value && typeof value.toDate === 'function') {
+      return { __type: 'timestamp', value: value.toDate().toISOString() };
+    }
+    if (Array.isArray(value)) {
+      return value.map((item) => this._serializeForBackup(item));
+    }
+    if (typeof value === 'object') {
+      const out = {};
+      for (const [k, v] of Object.entries(value)) {
+        out[k] = this._serializeForBackup(v);
+      }
+      return out;
+    }
+    return value;
+  }
+
+  _isTourIncomplete(pkg) {
+    const title = String(pkg.tourTitle || '').trim();
+    const destination = String(pkg.destination || '').trim();
+    const price = this._asNumber(pkg.price, 0);
+    const capacity = this._asNumber(pkg.maxGroupSize, 0);
+    const dates = String(pkg.availableDates || '').trim();
+    const duration = String(pkg.durationValue || '').trim();
+
+    return (
+      !title ||
+      !destination ||
+      price <= 0 ||
+      capacity <= 0 ||
+      !dates ||
+      !duration
+    );
+  }
+
+  async cleanupIncompleteTours({ dryRun = false } = {}) {
+    if (!this.isFirebaseInitialized) {
+      throw new Error('Firebase is not initialized');
+    }
+
+    const snap = await this.db.collection('tourPackages').get();
+    const incomplete = [];
+    snap.docs.forEach((doc) => {
+      const pkg = doc.data() || {};
+      if (this._isTourIncomplete(pkg)) {
+        incomplete.push({
+          id: doc.id,
+          tourTitle: pkg.tourTitle || '',
+          destination: pkg.destination || '',
+          price: pkg.price || '',
+          maxGroupSize: pkg.maxGroupSize || '',
+          availableDates: pkg.availableDates || '',
+        });
+      }
+    });
+
+    if (dryRun) {
+      return {
+        dryRun: true,
+        scanned: snap.size,
+        incompleteCount: incomplete.length,
+        incomplete,
+      };
+    }
+
+    let deleted = 0;
+    const failed = [];
+    for (const item of incomplete) {
+      try {
+        const ratings = await this.db.collection('tourPackages').doc(item.id).collection('ratings').get();
+        const batch = this.db.batch();
+        ratings.docs.forEach((r) => batch.delete(r.ref));
+        batch.delete(this.db.collection('tourPackages').doc(item.id));
+        await batch.commit();
+        deleted += 1;
+      } catch (error) {
+        failed.push({ id: item.id, message: error.message });
+      }
+    }
+
+    return {
+      dryRun: false,
+      scanned: snap.size,
+      incompleteCount: incomplete.length,
+      deleted,
+      failed,
+      incomplete,
+    };
+  }
+
   async pushToursToFirebase(localTours) {
     if (!this.isFirebaseInitialized) {
       throw new Error('Firebase is not initialized');

@@ -133,12 +133,11 @@ class _LoginPageState extends State<LoginPage> {
         _registrationError = error.toString();
       });
     } finally {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        setState(() {
+          _isSubmittingRegistration = false;
+        });
       }
-      setState(() {
-        _isSubmittingRegistration = false;
-      });
     }
   }
 

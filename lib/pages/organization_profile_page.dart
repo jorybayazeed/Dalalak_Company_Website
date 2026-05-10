@@ -70,12 +70,11 @@ class _OrganizationProfilePageState extends State<OrganizationProfilePage> {
         SnackBar(content: Text('Failed to load organization profile: $error')),
       );
     } finally {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
-      setState(() {
-        _isLoading = false;
-      });
     }
   }
 
@@ -114,12 +113,11 @@ class _OrganizationProfilePageState extends State<OrganizationProfilePage> {
         SnackBar(content: Text('Failed to save organization profile: $error')),
       );
     } finally {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
       }
-      setState(() {
-        _isSaving = false;
-      });
     }
   }
 

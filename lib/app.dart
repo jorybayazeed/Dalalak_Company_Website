@@ -129,12 +129,11 @@ class _DalelakCompanyAppState extends State<DalelakCompanyApp> {
         _loginError = 'Failed to connect to backend server.';
       });
     } finally {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        setState(() {
+          _isLoggingIn = false;
+        });
       }
-      setState(() {
-        _isLoggingIn = false;
-      });
     }
   }
 

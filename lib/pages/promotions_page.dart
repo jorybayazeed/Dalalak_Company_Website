@@ -385,8 +385,7 @@ class _RewardFormDialogState extends State<_RewardFormDialog> {
       'requiredLevel': _requiredLevel,
       'applicableTours': _selectedTours.toList(),
       'isActive': _isActive,
-      'validUntil':
-          _validUntil == null ? null : _validUntil!.toIso8601String(),
+      'validUntil': _validUntil?.toIso8601String(),
     };
     if (_type == 'partner_coupon') {
       data['partnerName'] = _partnerNameCtrl.text.trim();
@@ -424,7 +423,7 @@ class _RewardFormDialogState extends State<_RewardFormDialog> {
           children: [
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _type,
+                initialValue: _type,
                 decoration: const InputDecoration(
                   labelText: 'Reward Type',
                   floatingLabelBehavior: FloatingLabelBehavior.always,
@@ -463,7 +462,7 @@ class _RewardFormDialogState extends State<_RewardFormDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<int>(
-                      value: _requiredLevel,
+                      initialValue: _requiredLevel,
                       decoration: const InputDecoration(
                           labelText: 'Required Level'),
                       items: [
@@ -544,7 +543,7 @@ class _RewardFormDialogState extends State<_RewardFormDialog> {
                     ? 'Visible to tourists in the app'
                     : 'Hidden — won\'t show in app'),
                 onChanged: (v) => setState(() => _isActive = v),
-                activeColor: const Color(0xFF1DB954),
+                activeThumbColor: const Color(0xFF1DB954),
               ),
               const SizedBox(height: 8),
               const Text('Applicable Tours',
@@ -721,7 +720,7 @@ class _RewardCard extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: accent.withOpacity(0.12),
+                  color: accent.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(

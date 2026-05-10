@@ -648,6 +648,96 @@ app.get('/api/reports/summary', auth, async (req, res) => {
   }
 });
 
+app.get('/api/reports/performance', auth, async (req, res) => {
+  if (!ensureFirebaseDataMode(res)) return;
+
+  try {
+    const performance = await integrationService.getPerformanceMetrics(req.user);
+    return res.json(performance);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.get('/api/company/backup', auth, async (req, res) => {
+  if (!ensureFirebaseDataMode(res)) return;
+
+  try {
+    const backup = await integrationService.exportCompanyBackup(req.user);
+    await integrationService.logBackupToFirebase(req.user, backup);
+
+    try {
+      const backupsDir = path.join(__dirname, 'data', 'backups');
+      if (!fs.existsSync(backupsDir)) {
+        fs.mkdirSync(backupsDir, { recursive: true });
+      }
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const safeName = String(req.user?.name || 'company').replace(/[^a-z0-9_-]+/gi, '_');
+      fs.writeFileSync(
+        path.join(backupsDir, `company-${safeName}-${stamp}.json`),
+        JSON.stringify(backup, null, 2),
+        'utf8',
+      );
+    } catch (writeError) {
+      console.warn('Failed to persist company backup file:', writeError.message);
+    }
+
+    const safeName = String(req.user?.name || 'company').replace(/[^a-z0-9_-]+/gi, '_');
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="dalalak-${safeName}-backup-${new Date().toISOString().slice(0, 19)}.json"`,
+    );
+    return res.send(JSON.stringify(backup, null, 2));
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.get('/api/admin/backup', auth, adminOnly, async (req, res) => {
+  if (!ensureFirebaseDataMode(res)) return;
+
+  try {
+    const backup = await integrationService.exportBackup();
+
+    try {
+      const backupsDir = path.join(__dirname, 'data', 'backups');
+      if (!fs.existsSync(backupsDir)) {
+        fs.mkdirSync(backupsDir, { recursive: true });
+      }
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      fs.writeFileSync(
+        path.join(backupsDir, `backup-${stamp}.json`),
+        JSON.stringify(backup, null, 2),
+        'utf8',
+      );
+    } catch (writeError) {
+      console.warn('Failed to persist backup file:', writeError.message);
+    }
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="dalalak-backup-${new Date().toISOString().slice(0, 19)}.json"`,
+    );
+    return res.send(JSON.stringify(backup, null, 2));
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.post('/api/admin/cleanup/incomplete-tours', auth, adminOnly, async (req, res) => {
+  if (!ensureFirebaseDataMode(res)) return;
+
+  try {
+    const dryRun = req.query.dryRun === '1' || req.body?.dryRun === true;
+    const result = await integrationService.cleanupIncompleteTours({ dryRun });
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
 app.get('/api/rewards', auth, async (req, res) => {
   if (!ensureFirebaseDataMode(res)) return;
 

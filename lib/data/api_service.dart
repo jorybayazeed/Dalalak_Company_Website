@@ -17,18 +17,12 @@ class ApiService {
   ApiService({required this.baseUrl});
 
   final String baseUrl;
-  String? _token;
-
-  set token(String? value) {
-    _token = value;
-  }
-
-  String? get token => _token;
+  String? token;
 
   Map<String, String> _headers({bool withAuth = true}) {
     final headers = <String, String>{'Content-Type': 'application/json'};
-    if (withAuth && _token != null) {
-      headers['Authorization'] = 'Bearer $_token';
+    if (withAuth && token != null) {
+      headers['Authorization'] = 'Bearer $token';
     }
     return headers;
   }
@@ -63,7 +57,7 @@ class ApiService {
 
     final json = _parseResponse(response) as Map<String, dynamic>;
     final loginResponse = LoginResponse.fromJson(json);
-    _token = loginResponse.token;
+    token = loginResponse.token;
     return loginResponse;
   }
 
@@ -116,7 +110,7 @@ class ApiService {
   }
 
   Future<void> logout() async {
-    if (_token == null) {
+    if (token == null) {
       return;
     }
     final response = await http.post(
@@ -124,7 +118,7 @@ class ApiService {
       headers: _headers(),
     );
     _parseResponse(response);
-    _token = null;
+    token = null;
   }
 
   Future<DashboardOverview> getDashboardOverview() async {
@@ -334,5 +328,51 @@ class ApiService {
     );
     final json = _parseResponse(response) as Map<String, dynamic>;
     return CompanyProfile.fromJson(json);
+  }
+
+  Future<PerformanceMetrics> getPerformanceMetrics() async {
+    final response = await http.get(_uri('/api/reports/performance'), headers: _headers());
+    final json = _parseResponse(response) as Map<String, dynamic>;
+    return PerformanceMetrics.fromJson(json);
+  }
+
+  Future<String> downloadBackup() async {
+    final response = await http.get(_uri('/api/admin/backup'), headers: _headers());
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String message = 'Backup failed (${response.statusCode})';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded['message'] is String) {
+          message = decoded['message'] as String;
+        }
+      } catch (_) {}
+      throw ApiException(message);
+    }
+    return response.body;
+  }
+
+  Future<String> downloadCompanyBackup() async {
+    final response = await http.get(_uri('/api/company/backup'), headers: _headers());
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String message = 'Backup failed (${response.statusCode})';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded['message'] is String) {
+          message = decoded['message'] as String;
+        }
+      } catch (_) {}
+      throw ApiException(message);
+    }
+    return response.body;
+  }
+
+  Future<CleanupResult> cleanupIncompleteTours({bool dryRun = false}) async {
+    final response = await http.post(
+      _uri('/api/admin/cleanup/incomplete-tours'),
+      headers: _headers(),
+      body: jsonEncode({'dryRun': dryRun}),
+    );
+    final json = _parseResponse(response) as Map<String, dynamic>;
+    return CleanupResult.fromJson(json);
   }
 }

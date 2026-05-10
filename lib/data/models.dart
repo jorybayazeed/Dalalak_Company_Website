@@ -651,3 +651,171 @@ class CompanyProfile {
         'website': website,
       };
 }
+
+class GuidePerformance {
+  const GuidePerformance({
+    required this.guideId,
+    required this.name,
+    required this.averageRating,
+    required this.reviewsCount,
+    required this.toursCount,
+  });
+
+  final String guideId;
+  final String name;
+  final double averageRating;
+  final int reviewsCount;
+  final int toursCount;
+
+  factory GuidePerformance.fromJson(Map<String, dynamic> json) {
+    return GuidePerformance(
+      guideId: (json['guideId'] as String?) ?? '',
+      name: (json['name'] as String?) ?? 'Unknown',
+      averageRating: ((json['averageRating'] as num?) ?? 0).toDouble(),
+      reviewsCount: ((json['reviewsCount'] as num?) ?? 0).toInt(),
+      toursCount: ((json['toursCount'] as num?) ?? 0).toInt(),
+    );
+  }
+}
+
+class TourParticipation {
+  const TourParticipation({
+    required this.tourId,
+    required this.name,
+    required this.capacity,
+    required this.bookings,
+    required this.participants,
+    required this.fillRate,
+  });
+
+  final String tourId;
+  final String name;
+  final int capacity;
+  final int bookings;
+  final int participants;
+  final double fillRate;
+
+  factory TourParticipation.fromJson(Map<String, dynamic> json) {
+    return TourParticipation(
+      tourId: (json['tourId'] as String?) ?? '',
+      name: (json['name'] as String?) ?? 'Unnamed',
+      capacity: ((json['capacity'] as num?) ?? 0).toInt(),
+      bookings: ((json['bookings'] as num?) ?? 0).toInt(),
+      participants: ((json['participants'] as num?) ?? 0).toInt(),
+      fillRate: ((json['fillRate'] as num?) ?? 0).toDouble(),
+    );
+  }
+}
+
+class RatingDistribution {
+  const RatingDistribution({
+    required this.five,
+    required this.four,
+    required this.three,
+    required this.two,
+    required this.one,
+  });
+
+  final int five;
+  final int four;
+  final int three;
+  final int two;
+  final int one;
+
+  factory RatingDistribution.fromJson(Map<String, dynamic> json) {
+    return RatingDistribution(
+      five: ((json['five'] as num?) ?? 0).toInt(),
+      four: ((json['four'] as num?) ?? 0).toInt(),
+      three: ((json['three'] as num?) ?? 0).toInt(),
+      two: ((json['two'] as num?) ?? 0).toInt(),
+      one: ((json['one'] as num?) ?? 0).toInt(),
+    );
+  }
+}
+
+class PerformanceMetrics {
+  const PerformanceMetrics({
+    required this.totalBookings,
+    required this.confirmedBookings,
+    required this.completedBookings,
+    required this.cancelledBookings,
+    required this.totalParticipants,
+    required this.totalCapacity,
+    required this.fillRate,
+    required this.completionRate,
+    required this.overallSatisfaction,
+    required this.reviewsCount,
+    required this.guidePerformance,
+    required this.tourParticipation,
+    required this.ratingDistribution,
+    required this.generatedAt,
+  });
+
+  final int totalBookings;
+  final int confirmedBookings;
+  final int completedBookings;
+  final int cancelledBookings;
+  final int totalParticipants;
+  final int totalCapacity;
+  final double fillRate;
+  final double completionRate;
+  final double overallSatisfaction;
+  final int reviewsCount;
+  final List<GuidePerformance> guidePerformance;
+  final List<TourParticipation> tourParticipation;
+  final RatingDistribution ratingDistribution;
+  final String generatedAt;
+
+  factory PerformanceMetrics.fromJson(Map<String, dynamic> json) {
+    return PerformanceMetrics(
+      totalBookings: ((json['totalBookings'] as num?) ?? 0).toInt(),
+      confirmedBookings: ((json['confirmedBookings'] as num?) ?? 0).toInt(),
+      completedBookings: ((json['completedBookings'] as num?) ?? 0).toInt(),
+      cancelledBookings: ((json['cancelledBookings'] as num?) ?? 0).toInt(),
+      totalParticipants: ((json['totalParticipants'] as num?) ?? 0).toInt(),
+      totalCapacity: ((json['totalCapacity'] as num?) ?? 0).toInt(),
+      fillRate: ((json['fillRate'] as num?) ?? 0).toDouble(),
+      completionRate: ((json['completionRate'] as num?) ?? 0).toDouble(),
+      overallSatisfaction: ((json['overallSatisfaction'] as num?) ?? 0).toDouble(),
+      reviewsCount: ((json['reviewsCount'] as num?) ?? 0).toInt(),
+      guidePerformance: ((json['guidePerformance'] as List<dynamic>?) ?? [])
+          .map((item) => GuidePerformance.fromJson(item as Map<String, dynamic>))
+          .toList(),
+      tourParticipation: ((json['tourParticipation'] as List<dynamic>?) ?? [])
+          .map((item) => TourParticipation.fromJson(item as Map<String, dynamic>))
+          .toList(),
+      ratingDistribution: RatingDistribution.fromJson(
+        (json['ratingDistribution'] as Map<String, dynamic>?) ?? const {},
+      ),
+      generatedAt: (json['generatedAt'] as String?) ?? '',
+    );
+  }
+}
+
+class CleanupResult {
+  const CleanupResult({
+    required this.dryRun,
+    required this.scanned,
+    required this.incompleteCount,
+    required this.deleted,
+    required this.failed,
+  });
+
+  final bool dryRun;
+  final int scanned;
+  final int incompleteCount;
+  final int deleted;
+  final List<Map<String, dynamic>> failed;
+
+  factory CleanupResult.fromJson(Map<String, dynamic> json) {
+    return CleanupResult(
+      dryRun: (json['dryRun'] as bool?) ?? false,
+      scanned: ((json['scanned'] as num?) ?? 0).toInt(),
+      incompleteCount: ((json['incompleteCount'] as num?) ?? 0).toInt(),
+      deleted: ((json['deleted'] as num?) ?? 0).toInt(),
+      failed: ((json['failed'] as List<dynamic>?) ?? [])
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList(),
+    );
+  }
+}

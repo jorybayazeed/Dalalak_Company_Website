@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 class AssignTourGuidePage extends StatelessWidget {
+  const AssignTourGuidePage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

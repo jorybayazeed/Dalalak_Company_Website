@@ -402,12 +402,11 @@ class _GuidesPageState extends State<GuidesPage> {
         SnackBar(content: Text('Failed: $error')),
       );
     } finally {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        setState(() {
+          _isCreatingGuide = false;
+        });
       }
-      setState(() {
-        _isCreatingGuide = false;
-      });
       nameController.dispose();
       cityController.dispose();
       languagesController.dispose();

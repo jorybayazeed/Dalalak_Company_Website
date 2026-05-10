@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 class AgencyDashboardPage extends StatelessWidget {
+  const AgencyDashboardPage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

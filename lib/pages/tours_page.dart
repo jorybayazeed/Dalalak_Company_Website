@@ -172,7 +172,7 @@ class _ToursPageState extends State<ToursPage> {
                         _EditField(label: 'Duration', controller: durationController),
                         const SizedBox(height: 10),
                         DropdownButtonFormField<String>(
-                          value: selectedGuideId,
+                          initialValue: selectedGuideId,
                           items: guides
                               .map(
                                 (g) => DropdownMenuItem<String>(

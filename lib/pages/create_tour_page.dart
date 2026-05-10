@@ -43,7 +43,6 @@ class _CreateTourPageState extends State<CreateTourPage> {
   
   late MapController _mapController;
   LatLng? _selectedMapLocation;
-  bool _showMapPicker = false;
 
   @override
   void initState() {
@@ -84,12 +83,11 @@ class _CreateTourPageState extends State<CreateTourPage> {
         const SnackBar(content: Text('Failed to load guides from the system.')),
       );
     } finally {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        setState(() {
+          _isLoadingGuides = false;
+        });
       }
-      setState(() {
-        _isLoadingGuides = false;
-      });
     }
   }
 
@@ -183,12 +181,11 @@ class _CreateTourPageState extends State<CreateTourPage> {
         SnackBar(content: Text('Failed to create tour: $error')),
       );
     } finally {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
       }
-      setState(() {
-        _isSaving = false;
-      });
     }
   }
 
@@ -622,7 +619,7 @@ class _DropdownField extends StatelessWidget {
         Text(label),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          value: value != null && items.contains(value) ? value : null,
+          initialValue: value != null && items.contains(value) ? value : null,
           items: items
               .map(
                 (item) => DropdownMenuItem<String>(

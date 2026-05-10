@@ -6,7 +6,10 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "backup": "node scripts/backup.js",
+    "cleanup:scan": "node scripts/cleanup-incomplete-tours.js --dry-run",
+    "cleanup:run": "node scripts/cleanup-incomplete-tours.js --yes"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

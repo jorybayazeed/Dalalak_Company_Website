@@ -108,7 +108,7 @@ class _DashboardShellState extends State<DashboardShell> {
       case AppSection.reviews:
         return ReviewsPage(api: widget.api);
       case AppSection.settings:
-        return SettingsPage(api: widget.api);
+        return SettingsPage(api: widget.api, role: widget.role);
       case AppSection.notifications:
         return NotificationsPage(api: widget.api);
       case AppSection.organizationProfile:

@@ -10,13 +10,25 @@ class IntegrationService {
 
   initializeFirebase() {
     try {
-      const credentialsPath = process.env.FIREBASE_CREDENTIALS_PATH;
-      if (!credentialsPath || !fs.existsSync(credentialsPath)) {
+      // Credentials can come from:
+      // 1. FIREBASE_CREDENTIALS_JSON  - raw JSON string (best for cloud hosts like Render)
+      // 2. FIREBASE_CREDENTIALS_PATH  - path to JSON file (best for local dev)
+      let serviceAccount = null;
+
+      const credentialsJson = process.env.FIREBASE_CREDENTIALS_JSON;
+      if (credentialsJson && credentialsJson.trim()) {
+        serviceAccount = JSON.parse(credentialsJson);
+      } else {
+        const credentialsPath = process.env.FIREBASE_CREDENTIALS_PATH;
+        if (credentialsPath && fs.existsSync(credentialsPath)) {
+          serviceAccount = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
+        }
+      }
+
+      if (!serviceAccount) {
         console.log('Firebase credentials not found. Running without Firebase data.');
         return;
       }
-
-      const serviceAccount = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
 
       if (admin.apps.length === 0) {
         admin.initializeApp({
